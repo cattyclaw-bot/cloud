@@ -655,4 +655,54 @@ export const kiloclawRouter = createTRPCRouter({
 
     return { success: true };
   }),
+
+  openclawConfig: baseProcedure.query(async ({ ctx }) => {
+    try {
+      const client = new KiloClawInternalClient();
+      return await client.getOpenclawConfig(ctx.user.id);
+    } catch (err) {
+      if (err instanceof KiloClawApiError && err.statusCode === 404) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Instance not updated to support fetching OpenClaw config',
+        });
+      }
+      if (err instanceof KiloClawApiError && err.statusCode === 409) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Instance is not provisioned or not running',
+        });
+      }
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to fetch OpenClaw config',
+      });
+    }
+  }),
+
+  replaceOpenclawConfig: baseProcedure
+    .input(z.object({ config: z.record(z.string(), z.unknown()) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const client = new KiloClawInternalClient();
+        return await client.replaceOpenclawConfig(ctx.user.id, input.config);
+      } catch (err) {
+        if (err instanceof KiloClawApiError && err.statusCode === 404) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Instance not updated to support updating OpenClaw config',
+          });
+        }
+        if (err instanceof KiloClawApiError && err.statusCode === 409) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Instance is not provisioned or not running',
+          });
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to replace openclaw config',
+        });
+      }
+    }),
 });

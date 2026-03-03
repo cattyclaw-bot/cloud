@@ -214,6 +214,11 @@ export type ControllerVersionResponse = {
   openclawVersion?: string | null;
 };
 
+/** Response from GET /api/platform/openclaw-config */
+export type OpenclawConfigResponse = {
+  config: Record<string, unknown>;
+};
+
 /** Combined status + gateway token returned by tRPC getStatus */
 export type KiloClawDashboardStatus = PlatformStatusResponse & {
   gatewayToken: string | null;

@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   Hash,
   Package,
+  FileCode,
+  Hash,
   RotateCcw,
   Save,
   Square,
@@ -31,6 +33,7 @@ import { ChannelTokenInput } from './ChannelTokenInput';
 import { CHANNELS, CHANNEL_TYPES, type ChannelDefinition } from './channel-config';
 import { ConfirmActionDialog } from './ConfirmActionDialog';
 import { VersionPinCard } from './VersionPinCard';
+import { OpenclawConfigEditor } from './OpenclawConfigEditor';
 
 type ClawMutations = ReturnType<typeof useKiloClawMutations>;
 
@@ -232,6 +235,7 @@ export function SettingsTab({
   const { data: modelsData, isLoading: isLoadingModels } = useOpenRouterModels();
   const [confirmDestroy, setConfirmDestroy] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(false);
+  const [editConfigOpen, setEditConfigOpen] = useState(false);
 
   const modelOptions = useMemo<ModelOption[]>(
     () =>
@@ -489,6 +493,16 @@ export function SettingsTab({
               <Button
                 variant="outline"
                 size="sm"
+                disabled={!isRunning || isDestroying}
+                onClick={() => setEditConfigOpen(prev => !prev)}
+              >
+                <FileCode className="h-4 w-4" />
+                Edit Config
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={!isRunning || mutations.stop.isPending || isDestroying}
                 onClick={() => {
                   posthog?.capture('claw_stop_instance_clicked', {
@@ -553,6 +567,16 @@ export function SettingsTab({
                 </>
               )}
             </div>
+
+            {editConfigOpen && (
+              <div className="mt-4">
+                <OpenclawConfigEditor
+                  enabled={isRunning}
+                  mutations={mutations}
+                  onOpenChange={setEditConfigOpen}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

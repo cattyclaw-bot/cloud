@@ -65,6 +65,7 @@ import {
   ConfigRestoreResponseSchema,
   ControllerVersionResponseSchema,
   GatewayControllerError,
+  OpenclawConfigResponseSchema,
 } from './gateway-controller-types';
 import { parseRegions, shuffleRegions, deprioritizeRegion } from './regions';
 import {
@@ -1272,7 +1273,7 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
     sandboxId: string;
   } {
     if (!this.sandboxId) {
-      throw new GatewayControllerError(404, 'Instance not provisioned');
+      throw new GatewayControllerError(409, 'Instance not provisioned');
     }
     if (!this.flyMachineId) {
       throw new GatewayControllerError(409, 'Instance has no machine ID');
@@ -1371,6 +1372,15 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
     return parsed.data;
   }
 
+  private isErrorUnknownRoute(error: unknown): boolean {
+    // If a controller predates a new route, the request will either:
+    //   - fall through to the catch-all proxy (401 REQUIRE_PROXY_TOKEN)
+    //   - forward to the gateway which returns 404 for the unknown path.
+    return (
+      error instanceof GatewayControllerError && (error.status === 404 || error.status === 401)
+    );
+  }
+
   async getGatewayProcessStatus(): Promise<GatewayProcessStatus> {
     await this.loadState();
     return this.callGatewayController('/_kilo/gateway/status', 'GET', GatewayProcessStatusSchema);
@@ -1404,6 +1414,41 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
     );
   }
 
+  /** Returns null if the controller is too old to have the /_kilo/config/read endpoint. */
+  async getOpenclawConfig(): Promise<{ config: Record<string, unknown> } | null> {
+    await this.loadState();
+    try {
+      return await this.callGatewayController(
+        '/_kilo/config/read',
+        'GET',
+        OpenclawConfigResponseSchema
+      );
+    } catch (error) {
+      if (this.isErrorUnknownRoute(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /** Returns null if the controller is too old to have the /_kilo/config/replace endpoint. */
+  async replaceConfigOnMachine(config: Record<string, unknown>): Promise<{ ok: boolean } | null> {
+    await this.loadState();
+    try {
+      return await this.callGatewayController(
+        '/_kilo/config/replace',
+        'POST',
+        GatewayCommandResponseSchema,
+        config
+      );
+    } catch (error) {
+      if (this.isErrorUnknownRoute(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   /** Returns null if the controller is too old to have the /_kilo/version endpoint. */
   async getControllerVersion(): Promise<{
     version: string;
@@ -1418,15 +1463,10 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
         ControllerVersionResponseSchema
       );
     } catch (error) {
-      // Controllers that predate the /_kilo/version route: the request falls
-      // through to the catch-all proxy which returns 401 (REQUIRE_PROXY_TOKEN)
-      // or forwards to the gateway which returns 404 for the unknown path.
-      if (
-        error instanceof GatewayControllerError &&
-        (error.status === 404 || error.status === 401)
-      ) {
+      if (this.isErrorUnknownRoute(error)) {
         return null;
       }
+
       throw error;
     }
   }

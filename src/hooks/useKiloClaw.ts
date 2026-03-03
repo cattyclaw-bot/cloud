@@ -189,6 +189,15 @@ export function useKiloClawMutations() {
         },
       })
     ),
+    replaceOpenclawConfig: useMutation(
+      trpc.kiloclaw.replaceOpenclawConfig.mutationOptions({
+        onSuccess: async () => {
+          await queryClient.invalidateQueries({
+            queryKey: trpc.kiloclaw.openclawConfig.queryKey(),
+          });
+        },
+      })
+    ),
   };
 }
 
@@ -221,6 +230,17 @@ export function useKiloClawMyPin() {
   return useQuery(
     trpc.kiloclaw.getMyPin.queryOptions(undefined, {
       staleTime: 60_000, // pins don't change frequently
+    })
+  );
+}
+
+export function useKiloClawOpenclawConfig(enabled: boolean) {
+  const trpc = useTRPC();
+  return useQuery(
+    trpc.kiloclaw.openclawConfig.queryOptions(undefined, {
+      enabled,
+      refetchOnWindowFocus: false,
+      staleTime: 60_000,
     })
   );
 }

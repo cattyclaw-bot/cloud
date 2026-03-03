@@ -427,6 +427,59 @@ platform.post('/config/restore', async c => {
   }
 });
 
+// GET /api/platform/openclaw-config?userId=...
+// Returns the live openclaw.json from the running machine.
+platform.get('/openclaw-config', async c => {
+  const userId = c.req.query('userId');
+  if (!userId) {
+    return c.json({ error: 'userId query parameter is required' }, 400);
+  }
+
+  try {
+    const config = await withDORetry(
+      instanceStubFactory(c.env, userId),
+      stub => stub.getOpenclawConfig(),
+      'getOpenclawConfig'
+    );
+    if (!config) {
+      return c.json({ error: 'Failed to get OpenClaw config' }, 404);
+    }
+    return c.json(config, 200);
+  } catch (err) {
+    const { message, status } = sanitizeError(err, 'openclaw-config read');
+    return jsonError(message, status);
+  }
+});
+
+// POST /api/platform/openclaw-config
+// Replace the entire openclaw.json on the running machine.
+const ReplaceOpenclawConfigSchema = z.object({
+  userId: z.string().min(1),
+  config: z.record(z.string(), z.unknown()),
+});
+
+platform.post('/openclaw-config', async c => {
+  const result = await parseBody(c, ReplaceOpenclawConfigSchema);
+  if ('error' in result) return result.error;
+
+  const { userId, config } = result.data;
+
+  try {
+    const response = await withDORetry(
+      instanceStubFactory(c.env, userId),
+      stub => stub.replaceConfigOnMachine(config),
+      'replaceConfigOnMachine'
+    );
+    if (!response) {
+      return c.json({ error: 'Failed to update OpenClaw config' }, 404);
+    }
+    return c.json(response, 200);
+  } catch (err) {
+    const { message, status } = sanitizeError(err, 'openclaw-config replace');
+    return jsonError(message, status);
+  }
+});
+
 // POST /api/platform/doctor
 platform.post('/doctor', async c => {
   const result = await parseBody(c, UserIdRequestSchema);

@@ -51,6 +51,19 @@ export function registerConfigRoutes(
     await next();
   });
 
+  // Read the current openclaw.json config from disk.
+  app.get('/_kilo/config/read', c => {
+    try {
+      const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+      const config = JSON.parse(raw);
+      return c.json({ config });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[controller] /_kilo/config/read failed:', message);
+      return c.json({ error: `Failed to read config: ${message}` }, 500);
+    }
+  });
+
   // Restore config from env vars and restart the gateway.
   app.post('/_kilo/config/restore/:version', c => {
     const version = c.req.param('version');
@@ -76,6 +89,31 @@ export function registerConfigRoutes(
       console.error('[controller] /_kilo/config/restore failed:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       return c.json({ error: `Failed to restore config: ${message}` }, 500);
+    }
+  });
+
+  // Replace openclaw.json with a JSON blob
+  // No validation is done on the shape of the JSON
+  app.post('/_kilo/config/replace', async c => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return c.json({ error: 'Body must be a JSON object' }, 400);
+    }
+
+    try {
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(body, null, 2));
+      console.log('[controller] Config replaced');
+      return c.json({ ok: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[controller] Failed to replace config:', message);
+      return c.json({ error: `Failed to replace config: ${message}` }, 500);
     }
   });
 
