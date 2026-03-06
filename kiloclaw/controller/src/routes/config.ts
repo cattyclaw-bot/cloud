@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { timingSafeTokenEqual } from '../auth';
@@ -18,6 +19,24 @@ function computeEtag(raw: string): string {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function atomicWrite(targetPath: string, content: string): void {
+  const dir = path.dirname(targetPath);
+  const base = path.basename(targetPath);
+  const tmpPath = path.join(dir, `.${base}.kilotmp.${crypto.randomBytes(6).toString('hex')}`);
+
+  try {
+    fs.writeFileSync(tmpPath, content);
+    fs.renameSync(tmpPath, targetPath);
+  } catch (error) {
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      // Best-effort cleanup only.
+    }
+    throw error;
+  }
 }
 
 const CONFIG_PATH = '/root/.openclaw/openclaw.json';
@@ -147,7 +166,7 @@ export function registerConfigRoutes(
       }
 
       backupConfigFile(CONFIG_PATH);
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      atomicWrite(CONFIG_PATH, JSON.stringify(config, null, 2));
 
       console.log('[controller] Config replaced');
       return c.json({ ok: true });
