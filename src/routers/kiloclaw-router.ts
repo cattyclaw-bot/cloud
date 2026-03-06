@@ -695,7 +695,7 @@ export const kiloclawRouter = createTRPCRouter({
       if (err instanceof KiloClawApiError && err.statusCode === 409) {
         const { message } = getKiloClawApiErrorPayload(err);
         throw new TRPCError({
-          code: 'NOT_FOUND',
+          code: 'CONFLICT',
           message: message ?? 'Instance is not provisioned or not running',
         });
       }
@@ -729,7 +729,7 @@ export const kiloclawRouter = createTRPCRouter({
         if (err instanceof KiloClawApiError && err.statusCode === 409) {
           const { code, message } = getKiloClawApiErrorPayload(err);
           throw new TRPCError({
-            code: code === 'config_etag_conflict' ? 'CONFLICT' : 'NOT_FOUND',
+            code: 'CONFLICT',
             message: message ?? 'Instance is not provisioned or not running',
           });
         }
