@@ -4,6 +4,7 @@ import { registerConfigRoutes } from './config';
 import type { Supervisor } from '../supervisor';
 
 vi.mock('../config-writer', () => ({
+  backupConfigFile: vi.fn(),
   writeBaseConfig: vi.fn(),
 }));
 
@@ -17,11 +18,12 @@ vi.mock('node:fs', () => {
   };
 });
 
-import { writeBaseConfig } from '../config-writer';
+import { backupConfigFile, writeBaseConfig } from '../config-writer';
 import fs from 'node:fs';
 
 const readMock = vi.mocked(fs.readFileSync);
 const writeMock = vi.mocked(fs.writeFileSync);
+const backupMock = vi.mocked(backupConfigFile);
 
 function createMockSupervisor(): Supervisor {
   const state = 'running' as const;
@@ -269,6 +271,7 @@ type TestCase = {
     body?: unknown;
     bodyContains?: Record<string, unknown>;
     mocks?: {
+      backup?: (mock: typeof backupMock) => void;
       write?: (mock: typeof writeMock) => void;
     };
   };
@@ -304,6 +307,10 @@ async function test(tc: TestCase) {
 
   if (tc.expect.mocks?.write) {
     tc.expect.mocks.write(writeMock);
+  }
+
+  if (tc.expect.mocks?.backup) {
+    tc.expect.mocks.backup(backupMock);
   }
 }
 
@@ -417,6 +424,10 @@ describe('/_kilo/config/replace routes', () => {
         status: 200,
         body: { ok: true },
         mocks: {
+          backup: mock => {
+            expect(mock).toHaveBeenCalledOnce();
+            expect(mock).toHaveBeenCalledWith('/root/.openclaw/openclaw.json');
+          },
           write: mock => {
             expect(mock).toHaveBeenCalledOnce();
             const written = JSON.parse(mock.mock.calls[0][1] as string);
@@ -443,6 +454,10 @@ describe('/_kilo/config/replace routes', () => {
         status: 200,
         body: { ok: true },
         mocks: {
+          backup: mock => {
+            expect(mock).toHaveBeenCalledOnce();
+            expect(mock).toHaveBeenCalledWith('/root/.openclaw/openclaw.json');
+          },
           write: mock => {
             expect(mock).toHaveBeenCalledOnce();
             const written = JSON.parse(mock.mock.calls[0][1] as string);
@@ -466,6 +481,9 @@ describe('/_kilo/config/replace routes', () => {
         status: 409,
         bodyContains: { error: expect.stringContaining('Config was modified') },
         mocks: {
+          backup: mock => {
+            expect(mock).not.toHaveBeenCalled();
+          },
           write: mock => {
             expect(mock).not.toHaveBeenCalled();
           },
@@ -486,6 +504,10 @@ describe('/_kilo/config/replace routes', () => {
         status: 200,
         body: { ok: true },
         mocks: {
+          backup: mock => {
+            expect(mock).toHaveBeenCalledOnce();
+            expect(mock).toHaveBeenCalledWith('/root/.openclaw/openclaw.json');
+          },
           write: mock => {
             expect(mock).toHaveBeenCalledOnce();
           },
@@ -544,6 +566,39 @@ describe('/_kilo/config/replace routes', () => {
       expect: {
         status: 500,
         bodyContains: { error: expect.stringContaining('Failed to replace config') },
+        mocks: {
+          backup: mock => {
+            expect(mock).toHaveBeenCalledOnce();
+            expect(mock).toHaveBeenCalledWith('/root/.openclaw/openclaw.json');
+          },
+        },
+      },
+    });
+  });
+
+  it('returns 500 when backup fails', async () => {
+    backupMock.mockImplementation(() => {
+      throw new Error('backup failed');
+    });
+
+    await test({
+      route: '/_kilo/config/replace',
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        config: { gateway: {} },
+      }),
+      expect: {
+        status: 500,
+        bodyContains: { error: expect.stringContaining('Failed to replace config') },
+        mocks: {
+          backup: mock => {
+            expect(mock).toHaveBeenCalledOnce();
+          },
+          write: mock => {
+            expect(mock).not.toHaveBeenCalled();
+          },
+        },
       },
     });
   });

@@ -241,6 +241,10 @@ export function useKiloClawOpenclawConfig(enabled: boolean) {
       enabled,
       refetchOnWindowFocus: false,
       staleTime: 60_000,
+      select: data => ({
+        openclawConfig: data.config,
+        etag: data.etag,
+      }),
     })
   );
 }

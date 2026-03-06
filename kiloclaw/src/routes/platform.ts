@@ -69,6 +69,13 @@ function jsonError(message: string, status: number): Response {
   });
 }
 
+function openclawConfigJsonError(message: string, status: number, code?: string): Response {
+  return new Response(JSON.stringify({ error: message, ...(code ? { code } : {}) }), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 /**
  * Safe error messages that can be returned to callers without leaking internals.
  * All other error messages are replaced with a generic "Internal error" response.
@@ -84,16 +91,54 @@ const SAFE_ERROR_PREFIXES = [
 function sanitizeError(err: unknown, operation: string): { message: string; status: number } {
   const raw = err instanceof Error ? err.message : 'Unknown error';
   const status = statusCodeFromError(err);
+  const normalized = raw.replace(/^(?:[A-Za-z]+Error:\s*)+/, '');
 
   // Log the full error for Sentry/debugging — this never reaches the caller
   console.error(`[platform] ${operation} failed:`, raw);
 
   // Allow known-safe messages through
-  if (SAFE_ERROR_PREFIXES.some(prefix => raw.startsWith(prefix))) {
-    return { message: raw, status };
+  if (SAFE_ERROR_PREFIXES.some(prefix => normalized.startsWith(prefix))) {
+    return { message: normalized, status };
   }
 
   return { message: `${operation} failed`, status };
+}
+
+const OPENCLAW_CONFIG_ERROR_CODES = new Set([
+  'controller_route_unavailable',
+  'config_read_failed',
+  'config_replace_failed',
+  'config_etag_conflict',
+  'invalid_json_body',
+  'invalid_request_body',
+]);
+
+function sanitizeOpenclawConfigError(
+  err: unknown,
+  operation: string
+): { message: string; status: number; code?: string } {
+  const raw = err instanceof Error ? err.message : 'Unknown error';
+  const status = statusCodeFromError(err);
+  const normalized = raw.replace(/^(?:[A-Za-z]+Error:\s*)+/, '');
+  const code =
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    typeof (err as { code?: unknown }).code === 'string'
+      ? (err as { code: string }).code
+      : undefined;
+
+  console.error(`[platform] ${operation} failed:`, raw);
+
+  if (code && OPENCLAW_CONFIG_ERROR_CODES.has(code)) {
+    return { message: normalized, status, code };
+  }
+
+  if (SAFE_ERROR_PREFIXES.some(prefix => normalized.startsWith(prefix))) {
+    return { message: normalized, status, ...(code ? { code } : {}) };
+  }
+
+  return { message: `${operation} failed`, status, ...(code ? { code } : {}) };
 }
 
 /**
@@ -443,12 +488,16 @@ platform.get('/openclaw-config', async c => {
       'getOpenclawConfig'
     );
     if (!config) {
-      return c.json({ error: 'Failed to get OpenClaw config' }, 404);
+      return openclawConfigJsonError(
+        'Failed to get OpenClaw config',
+        404,
+        'controller_route_unavailable'
+      );
     }
     return c.json(config, 200);
   } catch (err) {
-    const { message, status } = sanitizeError(err, 'openclaw-config read');
-    return jsonError(message, status);
+    const { message, status, code } = sanitizeOpenclawConfigError(err, 'openclaw-config read');
+    return openclawConfigJsonError(message, status, code);
   }
 });
 
@@ -473,12 +522,16 @@ platform.post('/openclaw-config', async c => {
       'replaceConfigOnMachine'
     );
     if (!response) {
-      return c.json({ error: 'Failed to update OpenClaw config' }, 404);
+      return openclawConfigJsonError(
+        'Failed to update OpenClaw config',
+        404,
+        'controller_route_unavailable'
+      );
     }
     return c.json(response, 200);
   } catch (err) {
-    const { message, status } = sanitizeError(err, 'openclaw-config replace');
-    return jsonError(message, status);
+    const { message, status, code } = sanitizeOpenclawConfigError(err, 'openclaw-config replace');
+    return openclawConfigJsonError(message, status, code);
   }
 });
 

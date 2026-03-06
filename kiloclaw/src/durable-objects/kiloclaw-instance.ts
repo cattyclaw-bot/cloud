@@ -1338,6 +1338,13 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
     }
 
     if (!response.ok) {
+      const errorCode =
+        typeof body === 'object' &&
+        body !== null &&
+        'code' in body &&
+        typeof (body as { code?: unknown }).code === 'string'
+          ? (body as { code: string }).code
+          : undefined;
       const errorMessage =
         typeof body === 'object' &&
         body !== null &&
@@ -1345,7 +1352,7 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
         typeof (body as { error?: unknown }).error === 'string'
           ? (body as { error: string }).error
           : `Gateway controller request failed (${response.status})`;
-      throw new GatewayControllerError(response.status, errorMessage);
+      throw new GatewayControllerError(response.status, errorMessage, errorCode);
     }
 
     const parsed = responseSchema.safeParse(body ?? {});
@@ -1415,7 +1422,7 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
   }
 
   /** Returns null if the controller is too old to have the /_kilo/config/read endpoint. */
-  async getOpenclawConfig(): Promise<{ config: Record<string, unknown>; etag: string } | null> {
+  async getOpenclawConfig(): Promise<{ config: Record<string, unknown>; etag?: string } | null> {
     await this.loadState();
     try {
       return await this.callGatewayController(

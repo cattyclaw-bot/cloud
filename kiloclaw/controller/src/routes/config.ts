@@ -4,7 +4,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import { timingSafeTokenEqual } from '../auth';
 import type { Supervisor } from '../supervisor';
-import { writeBaseConfig } from '../config-writer';
+import { backupConfigFile, writeBaseConfig } from '../config-writer';
 import { getBearerToken } from './gateway';
 
 const ReplaceConfigBodySchema = z.object({
@@ -72,7 +72,10 @@ export function registerConfigRoutes(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[controller] /_kilo/config/read failed:', message);
-      return c.json({ error: `Failed to read config: ${message}` }, 500);
+      return c.json(
+        { code: 'config_read_failed', error: `Failed to read config: ${message}` },
+        500
+      );
     }
   });
 
@@ -112,12 +115,12 @@ export function registerConfigRoutes(
     try {
       raw = await c.req.json();
     } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
+      return c.json({ code: 'invalid_json_body', error: 'Invalid JSON body' }, 400);
     }
 
     const parsed = ReplaceConfigBodySchema.safeParse(raw);
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body' }, 400);
+      return c.json({ code: 'invalid_request_body', error: 'Invalid request body' }, 400);
     }
 
     const { config, etag } = parsed.data;
@@ -127,12 +130,16 @@ export function registerConfigRoutes(
         const current = fs.readFileSync(CONFIG_PATH, 'utf8');
         if (etag !== computeEtag(current)) {
           return c.json(
-            { error: 'Config was modified since last read — please reload and retry' },
+            {
+              code: 'config_etag_conflict',
+              error: 'Config was modified since last read — please reload and retry',
+            },
             409
           );
         }
       }
 
+      backupConfigFile(CONFIG_PATH);
       fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 
       console.log('[controller] Config replaced');
@@ -140,7 +147,10 @@ export function registerConfigRoutes(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[controller] Failed to replace config:', message);
-      return c.json({ error: `Failed to replace config: ${message}` }, 500);
+      return c.json(
+        { code: 'config_replace_failed', error: `Failed to replace config: ${message}` },
+        500
+      );
     }
   });
 

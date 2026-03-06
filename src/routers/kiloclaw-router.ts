@@ -29,6 +29,27 @@ import {
 import { client as stripe } from '@/lib/stripe-client';
 import { APP_URL } from '@/lib/constants';
 
+function getKiloClawApiErrorPayload(err: KiloClawApiError): { message?: string; code?: string } {
+  if (!err.body) return {};
+
+  try {
+    const parsed = JSON.parse(err.body) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      return { message: err.body };
+    }
+
+    return {
+      message:
+        'error' in parsed && typeof parsed.error === 'string' && parsed.error.length > 0
+          ? parsed.error
+          : undefined,
+      code: 'code' in parsed && typeof parsed.code === 'string' ? parsed.code : undefined,
+    };
+  } catch {
+    return err.body.length > 0 ? { message: err.body } : {};
+  }
+}
+
 const kilocodeDefaultModelSchema = z
   .string()
   .regex(
@@ -662,20 +683,28 @@ export const kiloclawRouter = createTRPCRouter({
       return await client.getOpenclawConfig(ctx.user.id);
     } catch (err) {
       if (err instanceof KiloClawApiError && err.statusCode === 404) {
+        const { code, message } = getKiloClawApiErrorPayload(err);
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Instance not updated to support fetching OpenClaw config',
+          message:
+            code === 'controller_route_unavailable'
+              ? 'Instance not updated to support fetching OpenClaw config'
+              : (message ?? 'Failed to fetch OpenClaw config'),
         });
       }
       if (err instanceof KiloClawApiError && err.statusCode === 409) {
+        const { message } = getKiloClawApiErrorPayload(err);
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Instance is not provisioned or not running',
+          message: message ?? 'Instance is not provisioned or not running',
         });
       }
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to fetch OpenClaw config',
+        message:
+          err instanceof KiloClawApiError
+            ? (getKiloClawApiErrorPayload(err).message ?? 'Failed to fetch OpenClaw config')
+            : 'Failed to fetch OpenClaw config',
       });
     }
   }),
@@ -688,23 +717,28 @@ export const kiloclawRouter = createTRPCRouter({
         return await client.replaceOpenclawConfig(ctx.user.id, input.config, input.etag);
       } catch (err) {
         if (err instanceof KiloClawApiError && err.statusCode === 404) {
+          const { code, message } = getKiloClawApiErrorPayload(err);
           throw new TRPCError({
             code: 'NOT_FOUND',
-            message: 'Instance cannot update OpenClaw config until redeployed',
+            message:
+              code === 'controller_route_unavailable'
+                ? 'Instance cannot update OpenClaw config until redeployed'
+                : (message ?? 'Failed to replace openclaw config'),
           });
         }
         if (err instanceof KiloClawApiError && err.statusCode === 409) {
-          const isEtagConflict = err.body.includes('Config was modified');
+          const { code, message } = getKiloClawApiErrorPayload(err);
           throw new TRPCError({
-            code: isEtagConflict ? 'CONFLICT' : 'NOT_FOUND',
-            message: isEtagConflict
-              ? 'Config file was changed on the instance; please reload'
-              : 'Instance is not provisioned or not running',
+            code: code === 'config_etag_conflict' ? 'CONFLICT' : 'NOT_FOUND',
+            message: message ?? 'Instance is not provisioned or not running',
           });
         }
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to replace openclaw config',
+          message:
+            err instanceof KiloClawApiError
+              ? (getKiloClawApiErrorPayload(err).message ?? 'Failed to replace openclaw config')
+              : 'Failed to replace openclaw config',
         });
       }
     }),

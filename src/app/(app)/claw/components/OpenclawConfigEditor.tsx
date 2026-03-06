@@ -57,7 +57,10 @@ export function OpenclawConfigEditor({
 }) {
   const { data, isLoading, error } = useKiloClawOpenclawConfig(enabled);
 
-  const baseConfig = useMemo(() => (data ? JSON.stringify(data.config, null, 2) : ''), [data]);
+  const baseConfig = useMemo(
+    () => (data ? JSON.stringify(data.openclawConfig, null, 2) : ''),
+    [data]
+  );
 
   const [editedConfig, setEditedConfig] = useState<string | null>(null);
   const currentEditValue = editedConfig ?? baseConfig;
@@ -185,7 +188,7 @@ export function OpenclawConfigEditor({
                   toast.success('Config replaced');
                   onOpenChange(false);
                 },
-                onError: err => toast.error(`Failed to replace config: ${err.message}`),
+                onError: err => toast.error(err.message),
               }
             );
           }}
