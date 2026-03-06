@@ -30,11 +30,13 @@ import type {
  */
 export class KiloClawApiError extends Error {
   readonly statusCode: number;
+  readonly body: string;
 
-  constructor(statusCode: number) {
+  constructor(statusCode: number, body = '') {
     super(`KiloClaw API error (${statusCode})`);
     this.name = 'KiloClawApiError';
     this.statusCode = statusCode;
+    this.body = body;
   }
 }
 
@@ -73,7 +75,7 @@ export class KiloClawInternalClient {
         `KiloClaw API error (${res.status}) ${options?.method ?? 'GET'} ${path}:`,
         body
       );
-      throw new KiloClawApiError(res.status);
+      throw new KiloClawApiError(res.status, body);
     }
 
     return res.json() as Promise<T>;
@@ -242,11 +244,12 @@ export class KiloClawInternalClient {
 
   async replaceOpenclawConfig(
     userId: string,
-    config: Record<string, unknown>
+    config: Record<string, unknown>,
+    etag?: string
   ): Promise<{ ok: true }> {
     return this.request('/api/platform/openclaw-config', {
       method: 'POST',
-      body: JSON.stringify({ userId, config }),
+      body: JSON.stringify({ userId, config, ...(etag !== undefined && { etag }) }),
     });
   }
 }

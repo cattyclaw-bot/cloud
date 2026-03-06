@@ -179,7 +179,7 @@ export function OpenclawConfigEditor({
               return;
             }
             mutations.replaceOpenclawConfig.mutate(
-              { config: parsed },
+              { config: parsed, etag: data.etag },
               {
                 onSuccess: () => {
                   toast.success('Config replaced');

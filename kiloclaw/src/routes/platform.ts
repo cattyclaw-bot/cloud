@@ -78,6 +78,7 @@ const SAFE_ERROR_PREFIXES = [
   'Instance is not ', // e.g. "Instance is not running", "Instance is not provisioned"
   'User already has an ', // duplicate provision
   'Gateway controller ', // already sanitized at DO level
+  'Config was modified ', // etag mismatch on config replace
 ];
 
 function sanitizeError(err: unknown, operation: string): { message: string; status: number } {
@@ -456,18 +457,19 @@ platform.get('/openclaw-config', async c => {
 const ReplaceOpenclawConfigSchema = z.object({
   userId: z.string().min(1),
   config: z.record(z.string(), z.unknown()),
+  etag: z.string().optional(),
 });
 
 platform.post('/openclaw-config', async c => {
   const result = await parseBody(c, ReplaceOpenclawConfigSchema);
   if ('error' in result) return result.error;
 
-  const { userId, config } = result.data;
+  const { userId, config, etag } = result.data;
 
   try {
     const response = await withDORetry(
       instanceStubFactory(c.env, userId),
-      stub => stub.replaceConfigOnMachine(config),
+      stub => stub.replaceConfigOnMachine(config, etag),
       'replaceConfigOnMachine'
     );
     if (!response) {

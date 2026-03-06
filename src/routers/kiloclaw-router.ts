@@ -681,22 +681,25 @@ export const kiloclawRouter = createTRPCRouter({
   }),
 
   replaceOpenclawConfig: baseProcedure
-    .input(z.object({ config: z.record(z.string(), z.unknown()) }))
+    .input(z.object({ config: z.record(z.string(), z.unknown()), etag: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       try {
         const client = new KiloClawInternalClient();
-        return await client.replaceOpenclawConfig(ctx.user.id, input.config);
+        return await client.replaceOpenclawConfig(ctx.user.id, input.config, input.etag);
       } catch (err) {
         if (err instanceof KiloClawApiError && err.statusCode === 404) {
           throw new TRPCError({
             code: 'NOT_FOUND',
-            message: 'Instance not updated to support updating OpenClaw config',
+            message: 'Instance cannot update OpenClaw config until redeployed',
           });
         }
         if (err instanceof KiloClawApiError && err.statusCode === 409) {
+          const isEtagConflict = err.body.includes('Config was modified');
           throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Instance is not provisioned or not running',
+            code: isEtagConflict ? 'CONFLICT' : 'NOT_FOUND',
+            message: isEtagConflict
+              ? 'Config file was changed on the instance; please reload'
+              : 'Instance is not provisioned or not running',
           });
         }
         throw new TRPCError({

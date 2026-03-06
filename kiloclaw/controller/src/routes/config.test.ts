@@ -257,7 +257,6 @@ describe('/_kilo/config/patch routes', () => {
   });
 });
 
-
 type TestCase = {
   route: string;
   method?: string;
@@ -334,19 +333,22 @@ describe('/_kilo/config/read routes', () => {
     });
   });
 
-  it('returns the parsed config', async () => {
+  it('returns the parsed config with etag', async () => {
     const config = {
       gateway: { port: 3001 },
       agents: { defaults: { model: { primary: 'test' } } },
     };
+    const raw = JSON.stringify(config);
 
     await test({
       route: '/_kilo/config/read',
       headers: { Authorization: 'Bearer test-token' },
-      read: () => JSON.stringify(config),
+      read: () => raw,
       expect: {
         status: 200,
-        body: { config },
+        // Hardcoded real hash of above config, to avoid exposing or
+        // duplicating the private hash calculation function
+        body: { config, etag: 'ba2c2548ac3dbe82044f0276f9e9e03b' },
       },
     });
   });
@@ -361,7 +363,7 @@ describe('/_kilo/config/read routes', () => {
       expect: {
         status: 500,
         bodyContains: {
-          error: expect.stringContaining('Failed to read config')
+          error: expect.stringContaining('Failed to read config'),
         },
       },
     });
@@ -378,10 +380,10 @@ describe('/_kilo/config/replace routes', () => {
       route: '/_kilo/config/replace',
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        gateway: {}
+        config: { gateway: {} },
       }),
       expect: {
         status: 401,
@@ -395,7 +397,7 @@ describe('/_kilo/config/replace routes', () => {
       method: 'POST',
       headers: authHeaders('bad-token'),
       body: JSON.stringify({
-        gateway: {}
+        config: { gateway: {} },
       }),
       expect: {
         status: 401,
@@ -410,7 +412,7 @@ describe('/_kilo/config/replace routes', () => {
       route: '/_kilo/config/replace',
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify(newConfig),
+      body: JSON.stringify({ config: newConfig }),
       expect: {
         status: 200,
         body: { ok: true },
@@ -425,12 +427,91 @@ describe('/_kilo/config/replace routes', () => {
     });
   });
 
+  it('replaces config when etag matches', async () => {
+    const existing = JSON.stringify({ old: true }, null, 2);
+    const newConfig = { agents: { custom: true } };
+    // md5('{\n  "old": true\n}')
+    const etag = 'd9e2d0820f656cdfc4e3a872523a92a8';
+
+    await test({
+      route: '/_kilo/config/replace',
+      method: 'POST',
+      headers: authHeaders(),
+      read: () => existing,
+      body: JSON.stringify({ config: newConfig, etag }),
+      expect: {
+        status: 200,
+        body: { ok: true },
+        mocks: {
+          write: mock => {
+            expect(mock).toHaveBeenCalledOnce();
+            const written = JSON.parse(mock.mock.calls[0][1] as string);
+            expect(written).toEqual(newConfig);
+          },
+        },
+      },
+    });
+  });
+
+  it('rejects replace when etag does not match', async () => {
+    const existing = JSON.stringify({ old: true }, null, 2);
+
+    await test({
+      route: '/_kilo/config/replace',
+      method: 'POST',
+      headers: authHeaders(),
+      read: () => existing,
+      body: JSON.stringify({ config: { new: true }, etag: 'stale-etag' }),
+      expect: {
+        status: 409,
+        bodyContains: { error: expect.stringContaining('Config was modified') },
+        mocks: {
+          write: mock => {
+            expect(mock).not.toHaveBeenCalled();
+          },
+        },
+      },
+    });
+  });
+
+  it('skips etag check when etag is not provided', async () => {
+    const newConfig = { gateway: { port: 1234 } };
+
+    await test({
+      route: '/_kilo/config/replace',
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ config: newConfig }),
+      expect: {
+        status: 200,
+        body: { ok: true },
+        mocks: {
+          write: mock => {
+            expect(mock).toHaveBeenCalledOnce();
+          },
+        },
+      },
+    });
+  });
+
   it('rejects non-object body', async () => {
     await test({
       route: '/_kilo/config/replace',
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify([1, 2, 3]),
+      expect: {
+        status: 400,
+      },
+    });
+  });
+
+  it('rejects body without config field', async () => {
+    await test({
+      route: '/_kilo/config/replace',
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ gateway: {} }),
       expect: {
         status: 400,
       },
@@ -455,7 +536,7 @@ describe('/_kilo/config/replace routes', () => {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
-        gateway: {}
+        config: { gateway: {} },
       }),
       write: () => {
         throw new Error('');

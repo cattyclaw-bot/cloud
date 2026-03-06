@@ -1415,7 +1415,7 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
   }
 
   /** Returns null if the controller is too old to have the /_kilo/config/read endpoint. */
-  async getOpenclawConfig(): Promise<{ config: Record<string, unknown> } | null> {
+  async getOpenclawConfig(): Promise<{ config: Record<string, unknown>; etag: string } | null> {
     await this.loadState();
     try {
       return await this.callGatewayController(
@@ -1432,14 +1432,17 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
   }
 
   /** Returns null if the controller is too old to have the /_kilo/config/replace endpoint. */
-  async replaceConfigOnMachine(config: Record<string, unknown>): Promise<{ ok: boolean } | null> {
+  async replaceConfigOnMachine(
+    config: Record<string, unknown>,
+    etag?: string
+  ): Promise<{ ok: boolean } | null> {
     await this.loadState();
     try {
       return await this.callGatewayController(
         '/_kilo/config/replace',
         'POST',
         GatewayCommandResponseSchema,
-        config
+        { config, etag }
       );
     } catch (error) {
       if (this.isErrorUnknownRoute(error)) {
