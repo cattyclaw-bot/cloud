@@ -242,8 +242,8 @@ export function useKiloClawOpenclawConfig(enabled: boolean) {
   return useQuery(
     trpc.kiloclaw.openclawConfig.queryOptions(undefined, {
       enabled,
+      refetchOnMount: 'always',
       refetchOnWindowFocus: false,
-      staleTime: 60_000,
       select: data => ({
         openclawConfig: data.config,
         etag: data.etag,
