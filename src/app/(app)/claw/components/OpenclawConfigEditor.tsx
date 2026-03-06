@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, lazy, useState, useCallback, useMemo } from 'react';
+import { Suspense, lazy, useState, useCallback, useMemo, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { useKiloClawMutations } from '@/hooks/useKiloClaw';
@@ -62,9 +62,14 @@ export function OpenclawConfigEditor({
     [data]
   );
 
+  const [isMounted, setIsMounted] = useState(false);
   const [editedConfig, setEditedConfig] = useState<string | null>(null);
   const currentEditValue = editedConfig ?? baseConfig;
   const hasChanges = editedConfig !== null && editedConfig !== baseConfig;
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
@@ -98,6 +103,10 @@ export function OpenclawConfigEditor({
   }
 
   if (!data) return null;
+
+  if (!isMounted) {
+    return <EditorLoading />;
+  }
 
   return (
     <div className="space-y-3">
