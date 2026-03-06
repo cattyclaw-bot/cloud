@@ -166,6 +166,9 @@ export function useKiloClawMutations() {
           await queryClient.invalidateQueries({
             queryKey: trpc.kiloclaw.getConfig.queryKey(),
           });
+          await queryClient.invalidateQueries({
+            queryKey: trpc.kiloclaw.openclawConfig.queryKey(),
+          });
         },
       })
     ),

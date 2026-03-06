@@ -596,6 +596,7 @@ export function SettingsTab({
             });
             mutations.restoreConfig.mutate(undefined, {
               onSuccess: data => {
+                setEditConfigOpen(false);
                 if (data.signaled) {
                   toast.success('Config restored and gateway restarting');
                 } else {
