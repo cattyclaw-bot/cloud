@@ -16,6 +16,10 @@ function computeEtag(raw: string): string {
   return crypto.createHash('md5').update(raw).digest('hex');
 }
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 const CONFIG_PATH = '/root/.openclaw/openclaw.json';
 
 const VALID_VERSIONS = ['base'] as const;
@@ -67,6 +71,9 @@ export function registerConfigRoutes(
     try {
       const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
       const config = JSON.parse(raw);
+      if (!isJsonObject(config)) {
+        throw new Error('Config file must contain a JSON object');
+      }
       const etag = computeEtag(raw);
       return c.json({ config, etag });
     } catch (err) {
