@@ -727,7 +727,7 @@ export const kiloclawRouter = createTRPCRouter({
           });
         }
         if (err instanceof KiloClawApiError && err.statusCode === 409) {
-          const { code, message } = getKiloClawApiErrorPayload(err);
+          const { message } = getKiloClawApiErrorPayload(err);
           throw new TRPCError({
             code: 'CONFLICT',
             message: message ?? 'Instance is not provisioned or not running',
