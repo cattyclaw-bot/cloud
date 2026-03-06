@@ -297,12 +297,17 @@ async function test(tc: TestCase) {
 
   expect(resp.status).toBe(tc.expect.status);
 
+  const json =
+    tc.expect.body !== undefined || tc.expect.bodyContains !== undefined
+      ? await resp.json()
+      : undefined;
+
   if (tc.expect.body !== undefined) {
-    expect(await resp.json()).toEqual(tc.expect.body);
+    expect(json).toEqual(tc.expect.body);
   }
 
   if (tc.expect.bodyContains !== undefined) {
-    expect(await resp.json()).toMatchObject(tc.expect.bodyContains);
+    expect(json).toMatchObject(tc.expect.bodyContains);
   }
 
   if (tc.expect.mocks?.write) {
