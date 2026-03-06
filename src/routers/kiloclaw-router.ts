@@ -35,7 +35,7 @@ function getKiloClawApiErrorPayload(err: KiloClawApiError): { message?: string; 
   try {
     const parsed = JSON.parse(err.body) as unknown;
     if (typeof parsed !== 'object' || parsed === null) {
-      return { message: err.body };
+      return {};
     }
 
     return {
@@ -46,7 +46,7 @@ function getKiloClawApiErrorPayload(err: KiloClawApiError): { message?: string; 
       code: 'code' in parsed && typeof parsed.code === 'string' ? parsed.code : undefined,
     };
   } catch {
-    return err.body.length > 0 ? { message: err.body } : {};
+    return {};
   }
 }
 
