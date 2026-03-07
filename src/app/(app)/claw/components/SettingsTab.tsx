@@ -11,7 +11,7 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { toast } from 'sonner';
 import { useOpenRouterModels } from '@/app/api/openrouter/hooks';
@@ -284,6 +284,10 @@ export function SettingsTab({
       }
     );
   }
+
+  useEffect(() => {
+    if (!isRunning) setEditConfigOpen(false);
+  }, [isRunning]);
 
   // Determine if running version differs from tracked version
   const trackedVersion = cleanVersion(status.openclawVersion);

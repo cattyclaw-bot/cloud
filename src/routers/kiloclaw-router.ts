@@ -688,7 +688,7 @@ export const kiloclawRouter = createTRPCRouter({
           code: 'NOT_FOUND',
           message:
             code === 'controller_route_unavailable'
-              ? 'Instance not updated to support fetching OpenClaw config'
+              ? 'Instance needs redeploy to support fetching OpenClaw config'
               : (message ?? 'Failed to fetch OpenClaw config'),
         });
       }

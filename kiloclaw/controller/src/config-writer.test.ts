@@ -38,6 +38,7 @@ function fakeDeps(existingConfig?: string) {
       }),
       copyFileSync: vi.fn((src: string, dest: string) => {
         copied.push({ src, dest });
+        dirEntries = [...dirEntries, dest.split('/').pop() ?? dest];
       }),
       readdirSync: vi.fn(() => dirEntries),
       unlinkSync: vi.fn((filePath: string) => {
@@ -349,7 +350,7 @@ describe('backupConfigFile', () => {
 
     backupConfigFile('/tmp/openclaw.json', harness.deps);
 
-    expect(harness.unlinked).toHaveLength(7 - MAX_CONFIG_BACKUPS);
+    expect(harness.unlinked).toHaveLength(8 - MAX_CONFIG_BACKUPS);
     expect(harness.unlinked[0]).toBe('/tmp/openclaw.json.bak.2026-02-20T10-00-00.000Z');
     expect(harness.unlinked[1]).toBe('/tmp/openclaw.json.bak.2026-02-21T10-00-00.000Z');
   });
@@ -457,7 +458,7 @@ describe('writeBaseConfig', () => {
 
     writeBaseConfig(minimalEnv(), '/tmp/openclaw.json', harness.deps);
 
-    expect(harness.unlinked).toHaveLength(7 - MAX_CONFIG_BACKUPS);
+    expect(harness.unlinked).toHaveLength(8 - MAX_CONFIG_BACKUPS);
     expect(harness.unlinked[0]).toBe('/tmp/openclaw.json.bak.2026-02-20T10-00-00.000Z');
     expect(harness.unlinked[1]).toBe('/tmp/openclaw.json.bak.2026-02-21T10-00-00.000Z');
   });

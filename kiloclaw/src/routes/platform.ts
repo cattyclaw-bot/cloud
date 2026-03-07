@@ -62,14 +62,7 @@ function statusCodeFromError(err: unknown): number {
   return 500;
 }
 
-function jsonError(message: string, status: number): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
-
-function openclawConfigJsonError(message: string, status: number, code?: string): Response {
+function jsonError(message: string, status: number, code?: string): Response {
   return new Response(JSON.stringify({ error: message, ...(code ? { code } : {}) }), {
     status,
     headers: { 'content-type': 'application/json' },
@@ -488,16 +481,12 @@ platform.get('/openclaw-config', async c => {
       'getOpenclawConfig'
     );
     if (!config) {
-      return openclawConfigJsonError(
-        'Failed to get OpenClaw config',
-        404,
-        'controller_route_unavailable'
-      );
+      return jsonError('Failed to get OpenClaw config', 404, 'controller_route_unavailable');
     }
     return c.json(config, 200);
   } catch (err) {
     const { message, status, code } = sanitizeOpenclawConfigError(err, 'openclaw-config read');
-    return openclawConfigJsonError(message, status, code);
+    return jsonError(message, status, code);
   }
 });
 
@@ -522,16 +511,12 @@ platform.post('/openclaw-config', async c => {
       'replaceConfigOnMachine'
     );
     if (!response) {
-      return openclawConfigJsonError(
-        'Failed to update OpenClaw config',
-        404,
-        'controller_route_unavailable'
-      );
+      return jsonError('Failed to update OpenClaw config', 404, 'controller_route_unavailable');
     }
     return c.json(response, 200);
   } catch (err) {
     const { message, status, code } = sanitizeOpenclawConfigError(err, 'openclaw-config replace');
-    return openclawConfigJsonError(message, status, code);
+    return jsonError(message, status, code);
   }
 });
 

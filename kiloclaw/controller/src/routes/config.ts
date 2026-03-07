@@ -21,6 +21,8 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Not atomic in the sense of multiple writers; atomic in the sense that
+// we either completely succeed or completely fail. No partial writes.
 function atomicWrite(targetPath: string, content: string): void {
   const dir = path.dirname(targetPath);
   const base = path.basename(targetPath);
@@ -134,8 +136,11 @@ export function registerConfigRoutes(
   });
 
   // Replace openclaw.json with a JSON blob.
-  // Accepts { config, etag? }. When etag is provided, the write is
-  // rejected with 409 if the on-disk config has changed since the read.
+  //
+  // Optionally accepts an etag. When provided, the write is rejected with a
+  // 409 if the on-disk config has changed. This, and the underlying file op,
+  // is just best effort concurrency; it's not designed against high
+  // contention or tight race conditions
   app.post('/_kilo/config/replace', async c => {
     let raw: unknown;
     try {
@@ -151,6 +156,9 @@ export function registerConfigRoutes(
 
     const { config, etag } = parsed.data;
 
+    // Check the etag, and reject if the reader is holding a stale copy. The
+    // file can change between this check and when we actually write the file
+    // (including by OpenClaw itself), but this is good enough
     try {
       if (etag !== undefined) {
         const current = fs.readFileSync(CONFIG_PATH, 'utf8');

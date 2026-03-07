@@ -1384,7 +1384,8 @@ export class KiloClawInstance extends DurableObject<KiloClawEnv> {
     //   - fall through to the catch-all proxy (401 REQUIRE_PROXY_TOKEN)
     //   - forward to the gateway which returns 404 for the unknown path.
     return (
-      error instanceof GatewayControllerError && (error.status === 404 || error.status === 401)
+      error instanceof GatewayControllerError &&
+      (error.status === 404 || error.code === 'controller_route_unavailable')
     );
   }
 
