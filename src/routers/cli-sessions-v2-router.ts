@@ -8,13 +8,15 @@ import { captureException } from '@sentry/nextjs';
 import { TRPCClientError } from '@trpc/client';
 import { cli_sessions_v2 } from '@kilocode/db/schema';
 import { createCloudAgentNextClient } from '@/lib/cloud-agent-next/cloud-agent-client';
-import { generateApiToken } from '@/lib/tokens';
+import { generateApiToken, generateInternalServiceToken } from '@/lib/tokens';
 import {
   fetchSessionMessages,
   deleteSession as deleteSessionIngest,
 } from '@/lib/session-ingest-client';
+import { SESSION_INGEST_WORKER_URL } from '@/lib/config.server';
 import { baseGetSessionNextOutputSchema } from './cloud-agent-next-schemas';
 import { sanitizeGitUrl } from '@/routers/cli-sessions-router';
+import { verifyWebhookTriggerAccess } from '@/lib/webhook-trigger-ownership';
 
 /**
  * Check if an error indicates the session was not found in the cloud-agent DO.
@@ -368,4 +370,92 @@ export const cliSessionsV2Router = createTRPCRouter({
 
     return { success: true, session_id };
   }),
+
+  /**
+   * Share a v2 CLI session from a webhook trigger request.
+   * Creates a read-only public snapshot via the session-ingest worker.
+   *
+   * For org triggers, any org member can share; for personal triggers, only the owner.
+   */
+  shareForWebhookTrigger: baseProcedure
+    .input(
+      z.object({
+        kilo_session_id: z.string().startsWith('ses_'),
+        trigger_id: z.string().min(1),
+        organization_id: z.string().uuid().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await verifyWebhookTriggerAccess(ctx, input.trigger_id, input.organization_id);
+
+      const [session] = await db
+        .select({
+          kilo_user_id: cli_sessions_v2.kilo_user_id,
+          organization_id: cli_sessions_v2.organization_id,
+        })
+        .from(cli_sessions_v2)
+        .where(eq(cli_sessions_v2.session_id, input.kilo_session_id))
+        .limit(1);
+
+      if (!session) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Session not found',
+        });
+      }
+
+      // For org triggers, verify the session belongs to the same org.
+      // For personal triggers, verify the session belongs to the requesting user.
+      if (input.organization_id) {
+        if (session.organization_id !== input.organization_id) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Session not found',
+          });
+        }
+      } else {
+        if (session.kilo_user_id !== ctx.user.id) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Session not found',
+          });
+        }
+      }
+
+      if (!SESSION_INGEST_WORKER_URL) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'SESSION_INGEST_WORKER_URL is not configured',
+        });
+      }
+
+      const token = generateInternalServiceToken(session.kilo_user_id);
+      const url = `${SESSION_INGEST_WORKER_URL}/api/session/${encodeURIComponent(input.kilo_session_id)}/share`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Session share failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`,
+        });
+      }
+
+      const shareResponseSchema = z.object({ public_id: z.string() });
+      let body: z.infer<typeof shareResponseSchema>;
+      try {
+        body = shareResponseSchema.parse(await response.json());
+      } catch {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Session share succeeded but response was malformed',
+        });
+      }
+
+      return { share_id: body.public_id, session_id: input.kilo_session_id };
+    }),
 });

@@ -7,7 +7,6 @@ import {
   organizations,
   organization_memberships,
   cloud_agent_webhook_triggers,
-  cli_sessions_v2,
   agent_environment_profiles,
 } from '@kilocode/db/schema';
 import { CliSessionSharedState } from '@/types/cli-session-shared-state';
@@ -1939,91 +1938,13 @@ describe('cli-sessions-router', () => {
       });
     });
 
-    describe('v2 path (ses_* sessions)', () => {
-      const v2SessionId = 'ses_test_share_v2_session_1234';
-      let fetchSpy: jest.SpyInstance;
-
-      beforeEach(async () => {
-        await db.insert(cli_sessions_v2).values({
-          session_id: v2SessionId,
-          kilo_user_id: regularUser.id,
-          created_on_platform: 'webhook',
-        });
-
-        fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(
-          new Response(JSON.stringify({ success: true, public_id: 'test-public-uuid' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          })
-        );
-      });
-
-      afterEach(async () => {
-        fetchSpy.mockRestore();
-        await db.delete(cli_sessions_v2).where(eq(cli_sessions_v2.session_id, v2SessionId));
-      });
-
-      it('should share a v2 session via the session-ingest worker', async () => {
-        const caller = await createCallerForUser(regularUser.id);
-
-        const result = await caller.cliSessions.shareForWebhookTrigger({
-          kilo_session_id: v2SessionId,
-          trigger_id: testTriggerId,
-        });
-
-        expect(result).toEqual({
-          share_id: 'test-public-uuid',
-          session_id: v2SessionId,
-        });
-
-        // Verify fetch was called with correct URL and auth header
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        const [fetchUrl, fetchOpts] = fetchSpy.mock.calls[0];
-        expect(fetchUrl).toBe(
-          `https://test-ingest.example.com/api/session/${encodeURIComponent(v2SessionId)}/share`
-        );
-        expect(fetchOpts.method).toBe('POST');
-        expect(fetchOpts.headers.Authorization).toMatch(/^Bearer .+/);
-      });
-
-      it('should throw NOT_FOUND for non-existent v2 session', async () => {
-        await db.delete(cli_sessions_v2).where(eq(cli_sessions_v2.session_id, v2SessionId));
-
-        const caller = await createCallerForUser(regularUser.id);
-
-        await expect(
-          caller.cliSessions.shareForWebhookTrigger({
-            kilo_session_id: 'ses_nonexistent_session_12345',
-            trigger_id: testTriggerId,
-          })
-        ).rejects.toThrow('Session not found');
-      });
-
-      it('should throw INTERNAL_SERVER_ERROR when session-ingest returns an error', async () => {
-        fetchSpy.mockResolvedValueOnce(
-          new Response('Internal Server Error', {
-            status: 500,
-            statusText: 'Internal Server Error',
-          })
-        );
-
-        const caller = await createCallerForUser(regularUser.id);
-
-        await expect(
-          caller.cliSessions.shareForWebhookTrigger({
-            kilo_session_id: v2SessionId,
-            trigger_id: testTriggerId,
-          })
-        ).rejects.toThrow('Session share failed: 500 Internal Server Error');
-      });
-    });
-
     it('should throw NOT_FOUND for non-existent trigger', async () => {
       const caller = await createCallerForUser(regularUser.id);
+      const fakeUuid = '10000000-0000-1000-8000-000000000001';
 
       await expect(
         caller.cliSessions.shareForWebhookTrigger({
-          kilo_session_id: 'ses_any_session_id_1234567890',
+          kilo_session_id: fakeUuid,
           trigger_id: 'non-existent-trigger',
         })
       ).rejects.toThrow('Trigger not found');

@@ -241,14 +241,27 @@ export function WebhookRequestsContent({
     [organizationId]
   );
 
-  // State and mutation for sharing sessions (org context only)
+  // State and mutations for sharing sessions (org context only)
   const [sharingSessionId, setSharingSessionId] = useState<string | null>(null);
 
-  const { mutate: shareSession } = useMutation(
+  const { mutate: shareV1Session } = useMutation(
     trpc.cliSessions.shareForWebhookTrigger.mutationOptions({
       onSuccess: data => {
-        const basePath = data.session_id && isNewSession(data.session_id) ? '/s' : '/share';
-        const shareUrl = `${window.location.origin}${basePath}/${data.share_id}`;
+        const shareUrl = `${window.location.origin}/share/${data.share_id}`;
+        window.open(shareUrl, '_blank');
+        toast.success('Session shared successfully');
+        setSharingSessionId(null);
+      },
+      onError: err => {
+        toast.error(`Failed to share session: ${err.message}`);
+        setSharingSessionId(null);
+      },
+    })
+  );
+  const { mutate: shareV2Session } = useMutation(
+    trpc.cliSessionsV2.shareForWebhookTrigger.mutationOptions({
+      onSuccess: data => {
+        const shareUrl = `${window.location.origin}/s/${data.share_id}`;
         window.open(shareUrl, '_blank');
         toast.success('Session shared successfully');
         setSharingSessionId(null);
@@ -263,13 +276,18 @@ export function WebhookRequestsContent({
   const handleShareSession = useCallback(
     (kiloSessionId: string) => {
       setSharingSessionId(kiloSessionId);
-      shareSession({
+      const params = {
         kilo_session_id: kiloSessionId,
         trigger_id: triggerId,
         organization_id: organizationId,
-      });
+      };
+      if (isNewSession(kiloSessionId)) {
+        shareV2Session(params);
+      } else {
+        shareV1Session(params);
+      }
     },
-    [shareSession, triggerId, organizationId]
+    [shareV1Session, shareV2Session, triggerId, organizationId]
   );
 
   // Loading state
