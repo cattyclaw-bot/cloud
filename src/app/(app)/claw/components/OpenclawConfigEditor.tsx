@@ -226,7 +226,7 @@ export function OpenclawConfigEditor({
                 },
                 onError: err => {
                   if (err.data?.code === 'CONFLICT') {
-                    refetch();
+                    void refetch();
                     toast.error(
                       'Config was modified externally — click "Reload latest" to sync, then re-apply your changes'
                     );
