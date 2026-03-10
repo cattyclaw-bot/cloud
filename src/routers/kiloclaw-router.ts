@@ -28,6 +28,7 @@ import {
 } from '@/lib/kiloclaw/instance-registry';
 import { client as stripe } from '@/lib/stripe-client';
 import { APP_URL } from '@/lib/constants';
+import { redactOpenclawConfig, restoreRedactedSecrets } from '@/lib/kiloclaw/config-redaction';
 
 function getKiloClawApiErrorPayload(err: KiloClawApiError): { message?: string; code?: string } {
   if (!err.body) return {};
@@ -680,7 +681,11 @@ export const kiloclawRouter = createTRPCRouter({
   openclawConfig: baseProcedure.query(async ({ ctx }) => {
     try {
       const client = new KiloClawInternalClient();
-      return await client.getOpenclawConfig(ctx.user.id);
+      const response = await client.getOpenclawConfig(ctx.user.id);
+      return {
+        ...response,
+        config: redactOpenclawConfig(response.config),
+      };
     } catch (err) {
       if (err instanceof KiloClawApiError && err.statusCode === 404) {
         const { code, message } = getKiloClawApiErrorPayload(err);
@@ -714,7 +719,13 @@ export const kiloclawRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       try {
         const client = new KiloClawInternalClient();
-        return await client.replaceOpenclawConfig(ctx.user.id, input.config, input.etag);
+
+        // Fetch the current config so we can restore any redacted secrets
+        // that the user didn't change (they'll still have the placeholder).
+        const current = await client.getOpenclawConfig(ctx.user.id);
+        const mergedConfig = restoreRedactedSecrets(input.config, current.config);
+
+        return await client.replaceOpenclawConfig(ctx.user.id, mergedConfig, input.etag);
       } catch (err) {
         if (err instanceof KiloClawApiError && err.statusCode === 404) {
           const { code, message } = getKiloClawApiErrorPayload(err);
