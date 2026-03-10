@@ -782,7 +782,13 @@ export const cliSessionsRouter = createTRPCRouter({
   shareForWebhookTrigger: baseProcedure
     .input(
       z.object({
-        kilo_session_id: z.string().min(1),
+        kilo_session_id: z
+          .string()
+          .min(1)
+          .refine(
+            s => s.startsWith('ses_') || z.string().uuid().safeParse(s).success,
+            'Must be a ses_* session ID or a valid UUID'
+          ),
         trigger_id: z.string().min(1),
         organization_id: z.string().uuid().optional(),
       })
