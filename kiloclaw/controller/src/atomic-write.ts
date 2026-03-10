@@ -16,7 +16,7 @@ export type AtomicWriteDeps = {
 const defaultDeps: AtomicWriteDeps = {
   writeFileSync: (p, data) => fs.writeFileSync(p, data),
   renameSync: (oldPath, newPath) => fs.renameSync(oldPath, newPath),
-  unlinkSync: (p) => fs.unlinkSync(p),
+  unlinkSync: p => fs.unlinkSync(p),
 };
 
 /**

@@ -70,8 +70,10 @@ export function OpenclawConfigEditor({
       initialEtagRef.current = data.etag;
     }
   }, [data?.etag]);
-  const baseConfigChanged = data?.etag !== undefined && initialEtagRef.current !== undefined
-    && data.etag !== initialEtagRef.current;
+  const baseConfigChanged =
+    data?.etag !== undefined &&
+    initialEtagRef.current !== undefined &&
+    data.etag !== initialEtagRef.current;
   const currentEditValue = editedConfig ?? baseConfig;
   const hasChanges = editedConfig !== null && editedConfig !== baseConfig;
 
@@ -126,7 +128,9 @@ export function OpenclawConfigEditor({
       {baseConfigChanged && hasChanges && (
         <Alert variant="warning">
           <AlertDescription className="flex items-center justify-between">
-            <span>The config was updated externally. Your edits are based on an older version.</span>
+            <span>
+              The config was updated externally. Your edits are based on an older version.
+            </span>
             <Button variant="outline" size="sm" onClick={handleReload}>
               Reload latest
             </Button>
@@ -223,7 +227,9 @@ export function OpenclawConfigEditor({
                 onError: err => {
                   if (err.data?.code === 'CONFLICT') {
                     refetch();
-                    toast.error('Config was modified externally — click "Reload latest" to sync, then re-apply your changes');
+                    toast.error(
+                      'Config was modified externally — click "Reload latest" to sync, then re-apply your changes'
+                    );
                   } else {
                     toast.error(err.message);
                   }

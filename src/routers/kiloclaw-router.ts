@@ -51,8 +51,7 @@ function getKiloClawApiErrorPayload(err: KiloClawApiError): { message?: string; 
       return {};
     }
 
-    const code =
-      'code' in parsed && typeof parsed.code === 'string' ? parsed.code : undefined;
+    const code = 'code' in parsed && typeof parsed.code === 'string' ? parsed.code : undefined;
     const message =
       'error' in parsed && typeof parsed.error === 'string' && parsed.error.length > 0
         ? parsed.error

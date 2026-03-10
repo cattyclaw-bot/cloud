@@ -95,9 +95,8 @@ describe('restoreRedactedSecrets', () => {
 
   it('keeps new values when the user changed a secret', () => {
     const userConfig = redactOpenclawConfig(FULL_CONFIG);
-    (
-      (userConfig.gateway as Record<string, unknown>).auth as Record<string, unknown>
-    ).token = 'new-token';
+    ((userConfig.gateway as Record<string, unknown>).auth as Record<string, unknown>).token =
+      'new-token';
 
     const merged = restoreRedactedSecrets(userConfig, FULL_CONFIG);
     expect(
@@ -167,17 +166,15 @@ describe('restoreRedactedSecrets', () => {
     ).toBe('super-secret-gateway-token');
 
     // Telegram: user set new value, kept as-is
-    expect(
-      (merged.channels as Record<string, unknown>).telegram
-    ).toMatchObject({ botToken: 'brand-new-telegram-token' });
+    expect((merged.channels as Record<string, unknown>).telegram).toMatchObject({
+      botToken: 'brand-new-telegram-token',
+    });
 
     // Discord: user removed it, stays removed
     expect((merged.channels as Record<string, unknown>).discord).toBeUndefined();
 
     // Slack: both restored from original
-    expect(
-      (merged.channels as Record<string, unknown>).slack
-    ).toMatchObject({
+    expect((merged.channels as Record<string, unknown>).slack).toMatchObject({
       botToken: 'slack-bot-secret',
       appToken: 'slack-app-secret',
     });
