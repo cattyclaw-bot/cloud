@@ -59,5 +59,5 @@ export class GatewayControllerError extends Error {
 // Treat the Openclaw config on disk as an opaque blob
 export const OpenclawConfigResponseSchema = z.object({
   config: z.record(z.string(), z.unknown()),
-  etag: z.string().optional(),
+  etag: z.string(),
 });

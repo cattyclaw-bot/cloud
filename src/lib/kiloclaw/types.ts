@@ -217,7 +217,7 @@ export type ControllerVersionResponse = {
 /** Response from GET /api/platform/openclaw-config */
 export type OpenclawConfigResponse = {
   config: Record<string, unknown>;
-  etag?: string;
+  etag: string;
 };
 
 /** Combined status + gateway token returned by tRPC getStatus */

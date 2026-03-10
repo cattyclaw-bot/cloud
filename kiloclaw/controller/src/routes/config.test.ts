@@ -371,6 +371,21 @@ describe('/_kilo/config/read routes', () => {
     });
   });
 
+  it('returns 500 when config file contains non-object JSON', async () => {
+    await test({
+      route: '/_kilo/config/read',
+      headers: { Authorization: 'Bearer test-token' },
+      read: () => '[1, 2, 3]',
+      expect: {
+        status: 500,
+        bodyContains: {
+          code: 'config_read_failed',
+          error: 'Config file does not contain a JSON object',
+        },
+      },
+    });
+  });
+
   it('returns 500 when config file is missing', async () => {
     await test({
       route: '/_kilo/config/read',
