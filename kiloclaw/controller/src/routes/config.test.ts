@@ -126,6 +126,23 @@ describe('/_kilo/config/restore routes', () => {
     expect(body.error).toContain('disk full');
   });
 
+  it('restores config but does not signal when gateway is not running', async () => {
+    const app = new Hono();
+    const supervisor = createMockSupervisor();
+    vi.mocked(supervisor.getState).mockReturnValue('stopped');
+    registerConfigRoutes(app, supervisor, 'test-token');
+
+    const resp = await app.request('/_kilo/config/restore/base', {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    expect(resp.status).toBe(200);
+    expect(await resp.json()).toEqual({ ok: true, signaled: false });
+
+    expect(writeBaseConfig).toHaveBeenCalledWith(process.env);
+    expect(supervisor.signal).not.toHaveBeenCalled();
+  });
+
   it('does not leak through to catch-all proxy', async () => {
     const app = new Hono();
     const supervisor = createMockSupervisor();

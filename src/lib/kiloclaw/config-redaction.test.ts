@@ -137,6 +137,19 @@ describe('restoreRedactedSecrets', () => {
     expect(merged).toEqual({});
   });
 
+  it('deletes placeholder when parent path is completely missing from current config', () => {
+    const userConfig = {
+      gateway: { auth: { token: REDACTED_PLACEHOLDER } },
+    };
+    const currentConfig = {};
+
+    const merged = restoreRedactedSecrets(userConfig, currentConfig);
+    // The placeholder should be deleted since there's no original secret to restore
+    expect(
+      ((merged.gateway as Record<string, unknown>).auth as Record<string, unknown>).token
+    ).toBeUndefined();
+  });
+
   it('handles mixed: some placeholders, some new values, some removed', () => {
     const userConfig = {
       gateway: { port: 3001, auth: { token: REDACTED_PLACEHOLDER } },

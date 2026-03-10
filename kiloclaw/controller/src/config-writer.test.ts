@@ -321,6 +321,36 @@ describe('generateBaseConfig', () => {
 
     expect(config.gateway.auth).toBeUndefined();
   });
+
+  it('does not set allowInsecureAuth when AUTO_APPROVE_DEVICES is not true', () => {
+    const { deps } = fakeDeps();
+    const env = { ...minimalEnv() };
+    delete env.AUTO_APPROVE_DEVICES;
+    const config = generateBaseConfig(env, '/tmp/openclaw.json', deps);
+
+    expect(config.gateway.controlUi?.allowInsecureAuth).toBeUndefined();
+  });
+
+  it('does not set allowInsecureAuth when AUTO_APPROVE_DEVICES is false', () => {
+    const { deps } = fakeDeps();
+    const env = { ...minimalEnv(), AUTO_APPROVE_DEVICES: 'false' };
+    const config = generateBaseConfig(env, '/tmp/openclaw.json', deps);
+
+    expect(config.gateway.controlUi?.allowInsecureAuth).toBeUndefined();
+  });
+
+  it('configures Telegram allowFrom from explicit comma-separated list', () => {
+    const { deps } = fakeDeps();
+    const env = {
+      ...minimalEnv(),
+      TELEGRAM_BOT_TOKEN: 'tg-token',
+      TELEGRAM_DM_ALLOW_FROM: 'user1,user2',
+    };
+    const config = generateBaseConfig(env, '/tmp/openclaw.json', deps);
+
+    expect(config.channels.telegram.allowFrom).toEqual(['user1', 'user2']);
+    expect(config.channels.telegram.dmPolicy).toBe('pairing');
+  });
 });
 
 describe('backupConfigFile', () => {
