@@ -156,9 +156,8 @@ export function registerConfigRoutes(
 
     const { config, etag } = parsed.data;
 
-    // Check the etag, and reject if the reader is holding a stale copy. The
-    // file can change between this check and when we actually write the file
-    // (including by OpenClaw itself), but this is good enough
+    // Best effort optimistic concurrency: the read/check/write is not atomic,
+    // but sufficient to catch the common case of stale browser tabs.
     try {
       if (etag !== undefined) {
         const current = fs.readFileSync(CONFIG_PATH, 'utf8');
