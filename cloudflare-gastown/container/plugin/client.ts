@@ -112,6 +112,13 @@ export class GastownClient {
     });
   }
 
+  async updateAgentStatusMessage(message: string): Promise<void> {
+    await this.request<void>(this.agentPath('/status'), {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
   // -- Rig-scoped endpoints --
 
   async getBead(beadId: string): Promise<Bead> {
