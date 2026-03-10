@@ -14,6 +14,13 @@ const DEFAULT_CONFIG_PATH = '/root/.openclaw/openclaw.json';
 
 export const MAX_CONFIG_BACKUPS = 5;
 
+// NOTE: writeBaseConfig does NOT use the shared atomicWrite utility because
+// the temp file is created earlier by `openclaw onboard` and shared across
+// multiple steps (onboard writes to it, generateBaseConfig reads from it,
+// then we write the patched content and rename into place). atomicWrite
+// manages its own temp file internally, so it cannot participate in this
+// lifecycle.
+
 function pruneOldConfigBackups(dir: string, base: string, deps: ConfigWriterDeps): void {
   try {
     const backupPrefix = `${base}.bak.`;

@@ -30,6 +30,12 @@ import { client as stripe } from '@/lib/stripe-client';
 import { APP_URL } from '@/lib/constants';
 import { redactOpenclawConfig, restoreRedactedSecrets } from '@/lib/kiloclaw/config-redaction';
 
+/**
+ * Error codes whose messages may contain raw internal details (e.g. filesystem
+ * paths) and should NOT be forwarded to the client.
+ */
+const UNSAFE_ERROR_CODES = new Set(['config_read_failed', 'config_replace_failed']);
+
 function getKiloClawApiErrorPayload(err: KiloClawApiError): { message?: string; code?: string } {
   if (!err.body) return {};
 
@@ -39,12 +45,16 @@ function getKiloClawApiErrorPayload(err: KiloClawApiError): { message?: string; 
       return {};
     }
 
+    const code =
+      'code' in parsed && typeof parsed.code === 'string' ? parsed.code : undefined;
+    const message =
+      'error' in parsed && typeof parsed.error === 'string' && parsed.error.length > 0
+        ? parsed.error
+        : undefined;
+
     return {
-      message:
-        'error' in parsed && typeof parsed.error === 'string' && parsed.error.length > 0
-          ? parsed.error
-          : undefined,
-      code: 'code' in parsed && typeof parsed.code === 'string' ? parsed.code : undefined,
+      message: code && UNSAFE_ERROR_CODES.has(code) ? undefined : message,
+      code,
     };
   } catch {
     return {};

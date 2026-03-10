@@ -99,8 +99,6 @@ function sanitizeError(err: unknown, operation: string): { message: string; stat
 
 const OPENCLAW_CONFIG_ERROR_CODES = new Set([
   'controller_route_unavailable',
-  'config_read_failed',
-  'config_replace_failed',
   'config_etag_conflict',
   'invalid_json_body',
   'invalid_request_body',

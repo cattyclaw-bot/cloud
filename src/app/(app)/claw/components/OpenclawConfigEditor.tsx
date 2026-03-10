@@ -110,8 +110,8 @@ export function OpenclawConfigEditor({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div>
+      <div className="flex flex-col gap-3 md:flex-row">
+        <div className="min-w-0 md:flex-1">
           <p className="text-muted-foreground mb-1 text-xs font-medium">Editor</p>
           <div className="overflow-hidden rounded-md border">
             <Suspense fallback={<EditorLoading />}>
@@ -128,7 +128,7 @@ export function OpenclawConfigEditor({
           </div>
         </div>
 
-        <div>
+        <div className="min-w-0 md:flex-1">
           <p className="text-muted-foreground mb-1 text-xs font-medium">Diff</p>
           {hasChanges ? (
             <div className="overflow-hidden rounded-md border">

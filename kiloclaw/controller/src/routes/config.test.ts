@@ -8,23 +8,25 @@ vi.mock('../config-writer', () => ({
   writeBaseConfig: vi.fn(),
 }));
 
-// Mock fs at the module level (for config/patch tests)
+vi.mock('../atomic-write', () => ({
+  atomicWrite: vi.fn(),
+}));
+
+// Mock fs at the module level (for config/patch tests — readFileSync is still used directly)
 vi.mock('node:fs', () => {
   return {
     default: {
       readFileSync: vi.fn(),
-      writeFileSync: vi.fn(),
-      renameSync: vi.fn(),
-      unlinkSync: vi.fn(),
     },
   };
 });
 
 import { backupConfigFile, writeBaseConfig } from '../config-writer';
+import { atomicWrite } from '../atomic-write';
 import fs from 'node:fs';
 
 const readMock = vi.mocked(fs.readFileSync);
-const writeMock = vi.mocked(fs.writeFileSync);
+const atomicWriteMock = vi.mocked(atomicWrite);
 const backupMock = vi.mocked(backupConfigFile);
 
 function createMockSupervisor(): Supervisor {
@@ -52,7 +54,7 @@ function authHeaders(token = 'test-token'): HeadersInit {
 
 describe('/_kilo/config/restore routes', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('rejects requests without auth', async () => {
@@ -138,7 +140,7 @@ describe('/_kilo/config/restore routes', () => {
 
 describe('/_kilo/config/patch routes', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('enforces bearer auth', async () => {
@@ -181,8 +183,10 @@ describe('/_kilo/config/patch routes', () => {
     expect(resp.status).toBe(200);
     expect(await resp.json()).toEqual({ ok: true });
 
-    expect(writeMock).toHaveBeenCalledOnce();
-    const written = JSON.parse(writeMock.mock.calls[0][1] as string);
+    expect(atomicWriteMock).toHaveBeenCalledOnce();
+    // First arg should be the config path, second the serialized JSON
+    expect(atomicWriteMock.mock.calls[0][0]).toBe('/root/.openclaw/openclaw.json');
+    const written = JSON.parse(atomicWriteMock.mock.calls[0][1] as string);
     expect(written.agents.defaults.model.primary).toBe('kilocode/anthropic/claude-sonnet-4.5');
     // Existing keys preserved
     expect(written.gateway.port).toBe(3001);
@@ -232,8 +236,8 @@ describe('/_kilo/config/patch routes', () => {
     });
 
     expect(resp.status).toBe(200);
-    expect(writeMock).toHaveBeenCalledOnce();
-    const written = JSON.parse(writeMock.mock.calls[0][1] as string);
+    expect(atomicWriteMock).toHaveBeenCalledOnce();
+    const written = JSON.parse(atomicWriteMock.mock.calls[0][1] as string);
     // Banned keys are silently dropped at every depth
     expect(Object.hasOwn(written, '__proto__')).toBe(false);
     expect(Object.hasOwn(written, 'constructor')).toBe(false);
@@ -274,7 +278,7 @@ type TestCase = {
     bodyContains?: Record<string, unknown>;
     mocks?: {
       backup?: (mock: typeof backupMock) => void;
-      write?: (mock: typeof writeMock) => void;
+      write?: (mock: typeof atomicWriteMock) => void;
     };
   };
 };
@@ -288,7 +292,7 @@ async function test(tc: TestCase) {
   }
 
   if (tc.write) {
-    writeMock.mockImplementation(tc.write);
+    atomicWriteMock.mockImplementation(tc.write);
   }
 
   const resp = await app.request(tc.route, {
@@ -313,7 +317,7 @@ async function test(tc: TestCase) {
   }
 
   if (tc.expect.mocks?.write) {
-    tc.expect.mocks.write(writeMock);
+    tc.expect.mocks.write(atomicWriteMock);
   }
 
   if (tc.expect.mocks?.backup) {
@@ -323,7 +327,7 @@ async function test(tc: TestCase) {
 
 describe('/_kilo/config/read routes', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('rejects requests without auth', async () => {
@@ -386,7 +390,7 @@ describe('/_kilo/config/read routes', () => {
 
 describe('/_kilo/config/replace routes', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('rejects requests without auth', async () => {

@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import type { Hono } from 'hono';
 import { z } from 'zod';
+import { atomicWrite } from '../atomic-write';
 import { timingSafeTokenEqual } from '../auth';
 import type { Supervisor } from '../supervisor';
 import { backupConfigFile, writeBaseConfig } from '../config-writer';
@@ -19,26 +19,6 @@ function computeEtag(raw: string): string {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-// Not atomic in the sense of multiple writers; atomic in the sense that
-// we either completely succeed or completely fail. No partial writes.
-function atomicWrite(targetPath: string, content: string): void {
-  const dir = path.dirname(targetPath);
-  const base = path.basename(targetPath);
-  const tmpPath = path.join(dir, `.${base}.kilotmp.${crypto.randomBytes(6).toString('hex')}`);
-
-  try {
-    fs.writeFileSync(tmpPath, content);
-    fs.renameSync(tmpPath, targetPath);
-  } catch (error) {
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch {
-      // Best-effort cleanup only.
-    }
-    throw error;
-  }
 }
 
 const CONFIG_PATH = '/root/.openclaw/openclaw.json';
@@ -93,7 +73,10 @@ export function registerConfigRoutes(
       const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
       const config = JSON.parse(raw);
       if (!isJsonObject(config)) {
-        throw new Error('Config file must contain a JSON object');
+        return c.json(
+          { code: 'config_read_failed', error: 'Config file does not contain a JSON object' },
+          500
+        );
       }
       const etag = computeEtag(raw);
       return c.json({ config, etag });
@@ -208,7 +191,8 @@ export function registerConfigRoutes(
       const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
       const config = JSON.parse(raw);
       deepMerge(config, patch as Record<string, unknown>);
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+      const serialized = JSON.stringify(config, null, 2);
+      atomicWrite(CONFIG_PATH, serialized);
       console.log('[controller] Config patched:', JSON.stringify(patch));
       return c.json({ ok: true });
     } catch (err) {
