@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, lazy, useState, useCallback, useMemo, useEffect } from 'react';
+import { Suspense, lazy, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { useKiloClawMutations } from '@/hooks/useKiloClaw';
@@ -55,7 +55,7 @@ export function OpenclawConfigEditor({
   mutations: ClawMutations;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data, isLoading, error } = useKiloClawOpenclawConfig(enabled);
+  const { data, isLoading, error, refetch } = useKiloClawOpenclawConfig(enabled);
 
   const baseConfig = useMemo(
     () => (data ? JSON.stringify(data.openclawConfig, null, 2) : ''),
@@ -64,6 +64,14 @@ export function OpenclawConfigEditor({
 
   const [isMounted, setIsMounted] = useState(false);
   const [editedConfig, setEditedConfig] = useState<string | null>(null);
+  const initialEtagRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (data?.etag && initialEtagRef.current === undefined) {
+      initialEtagRef.current = data.etag;
+    }
+  }, [data?.etag]);
+  const baseConfigChanged = data?.etag !== undefined && initialEtagRef.current !== undefined
+    && data.etag !== initialEtagRef.current;
   const currentEditValue = editedConfig ?? baseConfig;
   const hasChanges = editedConfig !== null && editedConfig !== baseConfig;
 
@@ -108,8 +116,23 @@ export function OpenclawConfigEditor({
     return <EditorLoading />;
   }
 
+  const handleReload = () => {
+    initialEtagRef.current = data.etag;
+    setEditedConfig(null);
+  };
+
   return (
     <div className="space-y-3">
+      {baseConfigChanged && hasChanges && (
+        <Alert variant="warning">
+          <AlertDescription className="flex items-center justify-between">
+            <span>The config was updated externally. Your edits are based on an older version.</span>
+            <Button variant="outline" size="sm" onClick={handleReload}>
+              Reload latest
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-col gap-3 md:flex-row">
         <div className="min-w-0 md:flex-1">
           <p className="text-muted-foreground mb-1 text-xs font-medium">Editor</p>
@@ -197,7 +220,14 @@ export function OpenclawConfigEditor({
                   toast.success('Config replaced');
                   onOpenChange(false);
                 },
-                onError: err => toast.error(err.message),
+                onError: err => {
+                  if (err.data?.code === 'CONFLICT') {
+                    refetch();
+                    toast.error('Config was modified externally — click "Reload latest" to sync, then re-apply your changes');
+                  } else {
+                    toast.error(err.message);
+                  }
+                },
               }
             );
           }}
