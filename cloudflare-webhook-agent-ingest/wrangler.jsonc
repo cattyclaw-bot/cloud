@@ -37,7 +37,7 @@
   "services": [
     {
       "binding": "CLOUD_AGENT",
-      "service": "cloud-agent",
+      "service": "cloud-agent-next",
     },
   ],
   // PRODUCTION Queue for webhook delivery
@@ -125,7 +125,7 @@
       "services": [
         {
           "binding": "CLOUD_AGENT",
-          "service": "cloud-agent-dev",
+          "service": "cloud-agent-next-dev",
         },
       ],
       // DEV Queue (separate from production)

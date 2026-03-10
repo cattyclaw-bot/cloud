@@ -4,7 +4,12 @@ import * as z from 'zod';
 import { db } from '@/lib/drizzle';
 import { eq, and, desc, lt, or, ilike, sql, isNull, notInArray, type SQL } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
-import { cliSessions, sharedCliSessions, cloud_agent_webhook_triggers } from '@kilocode/db/schema';
+import {
+  cliSessions,
+  sharedCliSessions,
+  cloud_agent_webhook_triggers,
+  cli_sessions_v2,
+} from '@kilocode/db/schema';
 import { CliSessionSharedState } from '@/types/cli-session-shared-state';
 import {
   generateSignedUrls,
@@ -17,7 +22,9 @@ import {
 import { ensureOrganizationAccess } from '@/routers/organizations/utils';
 import { getCodeReviewById } from '@/lib/code-reviews/db/code-reviews';
 import { createCloudAgentClient } from '@/lib/cloud-agent/cloud-agent-client';
-import { generateApiToken } from '@/lib/tokens';
+import { generateApiToken, generateInternalServiceToken } from '@/lib/tokens';
+import { isNewSession } from '@/lib/cloud-agent/session-type';
+import { SESSION_INGEST_WORKER_URL } from '@/lib/config.server';
 
 export const BLOB_TYPES = [
   'api_conversation_history',
@@ -775,7 +782,7 @@ export const cliSessionsRouter = createTRPCRouter({
   shareForWebhookTrigger: baseProcedure
     .input(
       z.object({
-        kilo_session_id: sessionIdField,
+        kilo_session_id: z.string().min(1),
         trigger_id: z.string().min(1),
         organization_id: z.string().uuid().optional(),
       })
@@ -808,6 +815,80 @@ export const cliSessionsRouter = createTRPCRouter({
         await ensureOrganizationAccess(ctx, input.organization_id);
       }
 
+      // v2 sessions (ses_* IDs) are stored in cli_sessions_v2 and shared via session-ingest worker
+      if (isNewSession(input.kilo_session_id)) {
+        const [session] = await db
+          .select({
+            kilo_user_id: cli_sessions_v2.kilo_user_id,
+            organization_id: cli_sessions_v2.organization_id,
+          })
+          .from(cli_sessions_v2)
+          .where(eq(cli_sessions_v2.session_id, input.kilo_session_id))
+          .limit(1);
+
+        if (!session) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Session not found',
+          });
+        }
+
+        // For org triggers, verify the session belongs to the same org.
+        // For personal triggers, verify the session belongs to the requesting user.
+        if (input.organization_id) {
+          if (session.organization_id !== input.organization_id) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Session not found',
+            });
+          }
+        } else {
+          if (session.kilo_user_id !== ctx.user.id) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Session not found',
+            });
+          }
+        }
+
+        if (!SESSION_INGEST_WORKER_URL) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'SESSION_INGEST_WORKER_URL is not configured',
+          });
+        }
+
+        const token = generateInternalServiceToken(session.kilo_user_id);
+        const url = `${SESSION_INGEST_WORKER_URL}/api/session/${encodeURIComponent(input.kilo_session_id)}/share`;
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `Session share failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`,
+          });
+        }
+
+        const shareResponseSchema = z.object({ public_id: z.string() });
+        let body: z.infer<typeof shareResponseSchema>;
+        try {
+          body = shareResponseSchema.parse(await response.json());
+        } catch {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Session share succeeded but response was malformed',
+          });
+        }
+
+        return { share_id: body.public_id, session_id: input.kilo_session_id };
+      }
+
+      // v1 path: legacy UUID sessions in cliSessions, shared via R2 blob copy
       const [session] = await db
         .select()
         .from(cliSessions)

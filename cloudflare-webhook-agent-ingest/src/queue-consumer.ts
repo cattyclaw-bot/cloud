@@ -5,6 +5,7 @@ import { logger } from './util/logger';
 import { withDORetry } from './util/do-retry';
 import { getTokenMintingService } from './services/token-minting-service.js';
 import { getProfileResolutionService } from './services/profile-resolution-service.js';
+import { classifyInitiateResponse } from './initiate-response';
 import { z } from 'zod';
 
 // Token cache TTL: 30 minutes. Token validity is 1 hour, so 30 min gives safety margin.
@@ -250,12 +251,14 @@ async function processWebhookMessage(
         setupCommands?: string[];
         autoCommit?: boolean;
         condenseOnComplete?: boolean;
+        createdOnPlatform: string;
       } = {
         prompt: renderedPrompt,
         mode: triggerConfig.mode,
         model: triggerConfig.model,
         githubRepo: triggerConfig.githubRepo,
         callbackTarget,
+        createdOnPlatform: 'webhook',
       };
 
       if (triggerConfig.orgId) {
@@ -402,25 +405,31 @@ async function processWebhookMessage(
       throw error;
     }
 
-    if (!initiateResponse.ok) {
-      const errorBody = await initiateResponse.text();
-      if (
-        initiateResponse.status === 400 &&
-        errorBody.includes('Session has already been initiated')
-      ) {
-        logger.info('Session already initiated, acknowledging', {
-          requestId: webhook.requestId,
-          cloudAgentSessionId,
-        });
+    const initiateAction = await classifyInitiateResponse(initiateResponse);
+
+    switch (initiateAction.action) {
+      case 'ack':
+        if (initiateResponse.ok) {
+          logger.info('Session initiated successfully', {
+            requestId: webhook.requestId,
+            cloudAgentSessionId: cloudAgentSessionId ?? 'unknown',
+          });
+        } else {
+          logger.info('Initiate response treated as idempotent success', {
+            requestId: webhook.requestId,
+            cloudAgentSessionId,
+            status: initiateResponse.status,
+          });
+        }
         message.ack();
         return;
-      }
-      if (initiateResponse.status === 402) {
-        logger.warn('Insufficient balance for initiateFromKilocodeSessionV2', {
+
+      case 'fail':
+        logger.error('initiateFromKilocodeSessionV2 failed', {
           requestId: webhook.requestId,
           cloudAgentSessionId,
           status: initiateResponse.status,
-          error: errorBody,
+          error: initiateAction.errorMessage,
         });
         await withDORetry(
           () => stub,
@@ -428,44 +437,20 @@ async function processWebhookMessage(
             doStub.updateRequest(webhook.requestId, {
               process_status: 'failed',
               completed_at: new Date().toISOString(),
-              error_message: errorBody || 'Insufficient balance',
+              error_message: initiateAction.errorMessage,
             }),
           'updateRequest'
         );
         message.ack();
         return;
-      }
-      if (initiateResponse.status >= 500) {
-        throw new Error(
-          `initiateFromKilocodeSessionV2 failed: ${initiateResponse.status} - ${errorBody}`
-        );
-      }
-      logger.error('initiateFromKilocodeSessionV2 failed', {
-        requestId: webhook.requestId,
-        cloudAgentSessionId,
-        status: initiateResponse.status,
-        error: errorBody,
-      });
-      await withDORetry(
-        () => stub,
-        doStub =>
-          doStub.updateRequest(webhook.requestId, {
-            process_status: 'failed',
-            completed_at: new Date().toISOString(),
-            error_message: errorBody,
-          }),
-        'updateRequest'
-      );
-      message.ack();
-      return;
+
+      case 'retry':
+        canRetryInitiate = true;
+        throw new Error(initiateAction.errorMessage);
+
+      case 'throw':
+        throw new Error(initiateAction.errorMessage);
     }
-
-    logger.info('Session initiated successfully', {
-      requestId: webhook.requestId,
-      cloudAgentSessionId: cloudAgentSessionId ?? 'unknown',
-    });
-
-    message.ack();
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Failed to process webhook', {

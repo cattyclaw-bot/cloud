@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { getWebhookRoutes } from '@/lib/webhook-routes';
+import { isNewSession } from '@/lib/cloud-agent/session-type';
 
 import { Button } from '@/components/ui/button';
 import { CopyTextButton } from '@/components/admin/CopyEmailButton';
@@ -246,7 +247,8 @@ export function WebhookRequestsContent({
   const { mutate: shareSession } = useMutation(
     trpc.cliSessions.shareForWebhookTrigger.mutationOptions({
       onSuccess: data => {
-        const shareUrl = `${window.location.origin}/share/${data.share_id}`;
+        const basePath = data.session_id && isNewSession(data.session_id) ? '/s' : '/share';
+        const shareUrl = `${window.location.origin}${basePath}/${data.share_id}`;
         window.open(shareUrl, '_blank');
         toast.success('Session shared successfully');
         setSharingSessionId(null);

@@ -1,14 +1,11 @@
 import { createTRPCRouter, baseProcedure } from '@/lib/trpc/init';
 import { ensureOrganizationAccess } from '@/routers/organizations/utils';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull, inArray } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import * as z from 'zod';
 import { db } from '@/lib/drizzle';
-import {
-  cloud_agent_webhook_triggers,
-  agent_environment_profiles,
-  cliSessions,
-} from '@kilocode/db/schema';
+import { cloud_agent_webhook_triggers, agent_environment_profiles } from '@kilocode/db/schema';
+import { resolveCloudAgentSessionIds } from '@/lib/webhook-session-resolution';
 import { triggerIdSchema } from '@/lib/webhook-trigger-validation';
 import {
   createWorkerTrigger,
@@ -555,26 +552,7 @@ export const webhookTriggersRouter = createTRPCRouter({
         .map(r => r.cloudAgentSessionId)
         .filter((id): id is string => id !== null);
 
-      let sessionIdMap = new Map<string, string>();
-
-      if (cloudAgentSessionIds.length > 0) {
-        const sessions = await db
-          .select({
-            cloudAgentSessionId: cliSessions.cloud_agent_session_id,
-            sessionId: cliSessions.session_id,
-          })
-          .from(cliSessions)
-          .where(inArray(cliSessions.cloud_agent_session_id, cloudAgentSessionIds));
-
-        sessionIdMap = new Map(
-          sessions
-            .filter(
-              (s): s is { cloudAgentSessionId: string; sessionId: string } =>
-                s.cloudAgentSessionId !== null
-            )
-            .map(s => [s.cloudAgentSessionId, s.sessionId])
-        );
-      }
+      const sessionIdMap = await resolveCloudAgentSessionIds(cloudAgentSessionIds);
 
       return result.requests.map(request => ({
         ...request,

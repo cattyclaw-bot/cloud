@@ -6,14 +6,14 @@ A webhook trigger service for Kilo Code that allows users to create named endpoi
 
 - Create named webhook endpoints per user/org
 - Capture and store last 50 requests per ingest endpoint
-- Queue-based delivery to cloud-agent
+- Queue-based delivery to cloud-agent-next
 - Internal API key authentication for CRUD routes (backend-to-backend)
 
 ## Architecture
 
 - **Durable Objects**: TriggerDO for per-trigger request storage with SQLite
-- **Queue**: WEBHOOK_DELIVERY_QUEUE for reliable delivery to cloud-agent
-- **Service Binding**: Direct connection to cloud-agent worker
+- **Queue**: WEBHOOK_DELIVERY_QUEUE for reliable delivery to cloud-agent-next
+- **Service Binding**: Direct connection to cloud-agent-next worker
 
 > **Note**: KV registry for abuse prevention is planned for future implementation.
 > See [plans/webhook-catcher-design.md](plans/webhook-catcher-design.md#future-work-kv-registry-for-abuse-prevention).
@@ -218,12 +218,12 @@ curl -X DELETE "https://localhost:8793/api/triggers/org/org_xyz789/my-github-web
 
 Captured requests go through the following status lifecycle:
 
-| Status       | Description                    |
-| ------------ | ------------------------------ |
-| `captured`   | Request received and stored    |
-| `inprogress` | Being processed by cloud-agent |
-| `success`    | Successfully processed         |
-| `failed`     | Processing failed              |
+| Status       | Description                         |
+| ------------ | ----------------------------------- |
+| `captured`   | Request received and stored         |
+| `inprogress` | Being processed by cloud-agent-next |
+| `success`    | Successfully processed              |
+| `failed`     | Processing failed                   |
 
 ## Environment Variables
 
@@ -266,10 +266,10 @@ The following resources are already configured:
 
 ### Service Bindings
 
-| Binding       | Target Worker     | Environment |
-| ------------- | ----------------- | ----------- |
-| `CLOUD_AGENT` | `cloud-agent`     | Production  |
-| `CLOUD_AGENT` | `cloud-agent-dev` | Development |
+| Binding       | Target Worker          | Environment |
+| ------------- | ---------------------- | ----------- |
+| `CLOUD_AGENT` | `cloud-agent-next`     | Production  |
+| `CLOUD_AGENT` | `cloud-agent-next-dev` | Development |
 
 ### KV Namespaces
 
@@ -326,8 +326,8 @@ The worker includes a queue consumer that processes webhook delivery messages fr
 2. Checks idempotency (only processes requests in `captured` status)
 3. Gets or mints an API token (cached in KV for 30 minutes)
 4. Renders the prompt from the trigger's template
-5. Calls cloud-agent's `prepareSession` to create a session
-6. Calls cloud-agent's `initiateFromKilocodeSessionV2` to start processing
+5. Calls cloud-agent-next's `prepareSession` to create a session
+6. Calls cloud-agent-next's `initiateFromKilocodeSessionV2` to start processing
 7. Updates request status through the lifecycle
 
 ### Queue Configuration
