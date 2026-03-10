@@ -5,7 +5,7 @@ ENV NODE_VERSION=22.13.1
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates curl gnupg git xz-utils unzip jq ripgrep rsync zstd \
-       build-essential python3 ffmpeg tmux \
+       build-essential python3 ffmpeg tmux chromium \
     && ARCH="$(dpkg --print-architecture)" \
     && case "${ARCH}" in \
          amd64) NODE_ARCH="x64" ;; \
@@ -42,7 +42,7 @@ RUN npm install -g pnpm
 
 # Install OpenClaw
 # Pin to specific version for reproducible builds
-RUN npm install -g openclaw@2026.3.2 \
+RUN npm install -g openclaw@2026.3.8 \
     && openclaw --version
 
 # Install ClawHub CLI
@@ -90,8 +90,8 @@ RUN cd /tmp/controller-build \
     && bun install --frozen-lockfile \
     && CONTROLLER_VERSION="$(date -u +'%Y.%-m.%-d')" \
     && bun build src/index.ts --outfile=/usr/local/bin/kiloclaw-controller.js --target=node --minify \
-       --define "KILOCLAW_CONTROLLER_VERSION='\"${CONTROLLER_VERSION}\"'" \
-       --define "KILOCLAW_CONTROLLER_COMMIT='\"${CONTROLLER_COMMIT}\"'" \
+       --define "KILOCLAW_CONTROLLER_VERSION=\"${CONTROLLER_VERSION}\"" \
+       --define "KILOCLAW_CONTROLLER_COMMIT=\"${CONTROLLER_COMMIT}\"" \
     && rm -rf /tmp/controller-build
 
 # Create OpenClaw directories

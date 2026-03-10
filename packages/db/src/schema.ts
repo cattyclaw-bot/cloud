@@ -62,6 +62,7 @@ import type {
   StoredModel,
   CustomLlmExtraBody,
   CustomLlmProvider,
+  InterleavedFormat,
 } from './schema-types';
 import type { AnyPgColumn as DrizzleAnyPgColumn } from 'drizzle-orm/pg-core';
 
@@ -897,6 +898,7 @@ export const custom_llm = pgTable('custom_llm', {
   force_reasoning: boolean(),
   opencode_settings: jsonb().$type<OpenCodeSettings>(),
   extra_body: jsonb().$type<CustomLlmExtraBody>(),
+  interleaved_format: text().$type<InterleavedFormat>(),
 });
 
 export type CustomLlm = typeof custom_llm.$inferSelect;
@@ -1711,6 +1713,9 @@ export const agent_configs = pgTable(
     // Status
     is_enabled: boolean().notNull().default(true),
 
+    // Generic runtime state (e.g. security_scan agents store { last_synced_at: string })
+    runtime_state: jsonb().$type<Record<string, unknown>>().default({}),
+
     // Metadata
     created_by: text().notNull(),
     created_at: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
@@ -2043,6 +2048,10 @@ export const cloud_agent_code_reviews = pgTable(
 
     // Which cloud agent backend executed this review: 'v1' (cloud-agent SSE) or 'v2' (cloud-agent-next)
     agent_version: text().default('v1'),
+
+    // PR gate check tracking
+    // GitHub Check Run ID; null for GitLab or pre-feature reviews
+    check_run_id: bigint({ mode: 'number' }),
 
     // Usage tracking (populated on completion by orchestrator)
     model: text(), // LLM model slug used (e.g., 'anthropic/claude-sonnet-4.6')

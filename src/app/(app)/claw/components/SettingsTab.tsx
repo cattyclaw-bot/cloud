@@ -254,7 +254,10 @@ export function SettingsTab({
   const isRunning = status.status === 'running';
   const { data: controllerVersion } = useControllerVersion(isRunning);
   const { data: myPin } = useKiloClawMyPin();
-  const supportsConfigRestore = calverAtLeast(controllerVersion?.version, '2026.2.26');
+  const supportsConfigRestore = calverAtLeast(
+    cleanVersion(controllerVersion?.version),
+    '2026.2.26'
+  );
 
   const channelStatus = config?.channels ?? {
     telegram: false,

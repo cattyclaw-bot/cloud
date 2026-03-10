@@ -13,6 +13,7 @@ import {
   UserIdRequestSchema,
   DestroyRequestSchema,
   ChannelsPatchSchema,
+  SecretsPatchSchema,
 } from '../schemas/instance-config';
 import {
   ImageVersionEntrySchema,
@@ -79,6 +80,7 @@ const SAFE_ERROR_PREFIXES = [
   'User already has an ', // duplicate provision
   'Gateway controller ', // already sanitized at DO level
   'Config was modified ', // etag mismatch on config replace
+  'Invalid secret patch: ', // catalog validation (allFieldsRequired, etc.)
 ];
 
 function sanitizeError(err: unknown, operation: string): { message: string; status: number } {
@@ -245,6 +247,26 @@ platform.patch('/channels', async c => {
     return c.json(updated, 200);
   } catch (err) {
     const { message, status } = sanitizeError(err, 'channels patch');
+    return jsonError(message, status);
+  }
+});
+
+// PATCH /api/platform/secrets
+platform.patch('/secrets', async c => {
+  const result = await parseBody(c, SecretsPatchSchema);
+  if ('error' in result) return result.error;
+
+  const { userId, secrets } = result.data;
+
+  try {
+    const updated = await withDORetry(
+      instanceStubFactory(c.env, userId),
+      stub => stub.updateSecrets(secrets),
+      'updateSecrets'
+    );
+    return c.json(updated, 200);
+  } catch (err) {
+    const { message, status } = sanitizeError(err, 'secrets patch');
     return jsonError(message, status);
   }
 });

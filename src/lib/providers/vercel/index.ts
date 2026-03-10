@@ -1,6 +1,5 @@
 import type { BYOKResult } from '@/lib/byok';
 import { kiloFreeModels, preferredModels } from '@/lib/models';
-import { isAnthropicModel } from '@/lib/providers/anthropic';
 import { getGatewayErrorRate } from '@/lib/providers/gateway-error-rate';
 import { isOpenAiModel } from '@/lib/providers/openai';
 import type { VercelUserByokInferenceProviderId } from '@/lib/providers/openrouter/inference-provider-id';
@@ -33,14 +32,19 @@ function getRandomNumberLessThan100(randomSeed: string) {
 
 async function getVercelRoutingPercentage() {
   const errorRate = await getGatewayErrorRate();
-  const isOpenRouterErrorRateHigh =
-    errorRate.openrouter > ERROR_RATE_THRESHOLD && errorRate.vercel < ERROR_RATE_THRESHOLD;
-  if (isOpenRouterErrorRateHigh) {
+  const isOpenRouterErrorRateHigh = errorRate.openrouter > ERROR_RATE_THRESHOLD;
+  const isVercelErrorRateHigh = errorRate.vercel > ERROR_RATE_THRESHOLD;
+  if (isOpenRouterErrorRateHigh && !isVercelErrorRateHigh) {
     console.error(
       `[getVercelRoutingPercentage] OpenRouter error rate is high: ${errorRate.openrouter}`
     );
+    return 90;
   }
-  return isOpenRouterErrorRateHigh ? 90 : 10;
+  if (!isOpenRouterErrorRateHigh && isVercelErrorRateHigh) {
+    console.error(`[getVercelRoutingPercentage] Vercel error rate is high: ${errorRate.vercel}`);
+    return 10;
+  }
+  return 20;
 }
 
 function isLikelyAvailableOnAllGateways(requestedModel: string) {
@@ -80,15 +84,8 @@ export async function shouldRouteToVercel(
     return true;
   }
 
-  if (isAnthropicModel(requestedModel)) {
-    console.debug(
-      `[shouldRouteToVercel] Anthropic models are not routed to Vercel pending fine-grained tool streaming support`
-    );
-    return false;
-  }
-
   if (isOpenAiModel(requestedModel)) {
-    // 2026-03-03 Vercel returns this error: The model `gpt-5.3-codex-api-preview` does not exist or you do not have access to it.
+    // pending safety identifier clarification: https://kilo-code.slack.com/archives/C08UR25T02V/p1772486004882759
     console.debug(`[shouldRouteToVercel] OpenAI models are not routed to Vercel`);
     return false;
   }

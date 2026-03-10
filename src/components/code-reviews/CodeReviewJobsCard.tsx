@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -243,20 +244,36 @@ export function CodeReviewJobsCard({
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <a
-                          href={review.pr_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-foreground hover:text-primary inline-flex items-center gap-1 text-sm font-medium transition-colors hover:underline"
+                        <Link
+                          href={`/code-reviews/${review.id}`}
+                          className="text-foreground hover:text-primary text-sm font-medium transition-colors hover:underline"
                         >
                           {review.pr_title}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
+                        </Link>
                         <div className="text-muted-foreground mt-0.5 flex items-center gap-2 text-xs">
-                          <span>{review.repo_full_name}</span>
-                          <span>•</span>
-                          <span>#{review.pr_number}</span>
-                          <span>•</span>
+                          <a
+                            href={
+                              review.platform === 'gitlab'
+                                ? review.pr_url.replace(/\/-\/merge_requests\/\d+$/, '')
+                                : review.pr_url.replace(/\/pull\/\d+$/, '')
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-primary transition-colors hover:underline"
+                          >
+                            {review.repo_full_name}
+                          </a>
+                          <span>&middot;</span>
+                          <a
+                            href={review.pr_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-primary inline-flex items-center gap-1 transition-colors hover:underline"
+                          >
+                            #{review.pr_number}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          <span>&middot;</span>
                           <span>by @{review.pr_author}</span>
                         </div>
                       </div>

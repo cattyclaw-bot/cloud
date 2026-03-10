@@ -29,6 +29,8 @@ export type KiloNotification = {
   // When showIn is specified this can be used to target specific apps. When not specified all apps with notification support will show it:
   // CAUTION: use extension-native sparingly since it shows up as a native VSCode notification and is spammy
   showIn?: ('extension' | 'extension-native' | 'cli')[];
+  // ISO 8601 timestamp after which this notification should no longer be shown
+  expiresAt?: string;
 };
 
 const normalUnconditionalNotifications: KiloNotification[] = [
@@ -62,6 +64,17 @@ const normalUnconditionalNotifications: KiloNotification[] = [
     },
     showIn: ['extension', 'cli'],
   },
+  {
+    id: 'app-builder-promo-mar-6',
+    title: 'Try App Builder',
+    message: "Don't feel like coding? Try App Builder to build with natural language from the web",
+    action: {
+      actionText: 'Try App Builder',
+      actionURL: 'https://app.kilo.ai/app-builder',
+    },
+    showIn: ['extension'],
+    expiresAt: '2026-03-09T08:00:00Z',
+  },
 ];
 
 export async function generateUserNotifications(user: User): Promise<KiloNotification[]> {
@@ -69,6 +82,7 @@ export async function generateUserNotifications(user: User): Promise<KiloNotific
     generateTeamsTrialNotification,
     generateLowCreditNotification,
     generateAutoTopUpNotification,
+    generateAutoTopUpOrgsNotification,
     generateByokProvidersNotification,
     generateFirstDayWelcomeNotification,
     generateKiloPassNotification,
@@ -79,7 +93,10 @@ export async function generateUserNotifications(user: User): Promise<KiloNotific
     await Promise.all(conditionalNotifications.map(f => f(user)))
   ).flat();
 
-  return [...resolvedConditionalNotifications, ...normalUnconditionalNotifications];
+  const now = new Date();
+  return [...resolvedConditionalNotifications, ...normalUnconditionalNotifications].filter(
+    n => !n.expiresAt || new Date(n.expiresAt) > now
+  );
 }
 
 async function generateLowCreditNotification(user: User): Promise<KiloNotification[]> {
@@ -131,6 +148,26 @@ async function generateAutoTopUpNotification(user: User): Promise<KiloNotificati
       action: {
         actionText: 'Enable Auto Top-Ups',
         actionURL: 'https://app.kilo.ai/credits',
+      },
+      showIn: ['cli', 'extension'],
+    },
+  ];
+}
+
+async function generateAutoTopUpOrgsNotification(user: User): Promise<KiloNotification[]> {
+  const orgs = await getUserOrganizationsWithSeats(user.id);
+  const isOwnerOrAdmin = orgs.some(org => org.role === 'owner');
+  if (!isOwnerOrAdmin) return [];
+
+  return [
+    {
+      id: 'auto-top-up-orgs-march-10',
+      title: 'New: Auto Top-Ups For Organizations',
+      message:
+        "Set your top-up amount once—we'll automatically add credits to your organization's balance when it drops below $50.",
+      action: {
+        actionText: 'Enable Auto Top-Ups',
+        actionURL: 'https://app.kilo.ai/',
       },
       showIn: ['cli', 'extension'],
     },

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Terminal, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertCircle, Loader2, Terminal, CheckCircle2, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useTRPC } from '@/lib/trpc/utils';
 import {
@@ -193,7 +193,12 @@ export function CodeReviewStreamView({ reviewId, onComplete }: CodeReviewStreamV
 
   // Mark as complete if the review is already in a terminal state
   useEffect(() => {
-    if (reviewStatus === 'completed' || reviewStatus === 'failed' || reviewStatus === 'cancelled') {
+    if (
+      reviewStatus === 'completed' ||
+      reviewStatus === 'failed' ||
+      reviewStatus === 'cancelled' ||
+      reviewStatus === 'interrupted'
+    ) {
       setIsComplete(true);
       if (reviewStatus === 'completed') {
         onComplete?.();
@@ -324,6 +329,29 @@ export function CodeReviewStreamView({ reviewId, onComplete }: CodeReviewStreamV
   }, [useWebSocket, polledEvents, onComplete]);
 
   // ---------------------------------------------------------------------------
+  // Mode C: Historical session data (completed reviews)
+  // ---------------------------------------------------------------------------
+
+  const isTerminal = ['completed', 'failed', 'cancelled', 'interrupted'].includes(
+    reviewStatus ?? ''
+  );
+
+  const { data: sessionMessages, isLoading: isLoadingHistory } = useQuery({
+    ...trpc.codeReviews.getSessionMessages.queryOptions({ reviewId }),
+    // Only fetch historical data when the review is done and we have no live events
+    enabled: !!reviewId && isTerminal && events.length === 0,
+  });
+
+  // Populate events from historical session data
+  useEffect(() => {
+    if (!isTerminal || events.length > 0) return;
+    if (!sessionMessages?.success) return;
+    if (sessionMessages.entries.length === 0) return;
+
+    setEvents(sessionMessages.entries);
+  }, [isTerminal, sessionMessages, events.length]);
+
+  // ---------------------------------------------------------------------------
   // Auto-scroll
   // ---------------------------------------------------------------------------
 
@@ -376,7 +404,9 @@ export function CodeReviewStreamView({ reviewId, onComplete }: CodeReviewStreamV
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Terminal className="h-4 w-4" />
-            <CardTitle className="text-sm font-medium">Code Review Progress</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {isTerminal ? 'Session Log' : 'Code Review Progress'}
+            </CardTitle>
           </div>
           {isComplete ? (
             reviewStatus === 'failed' ? (
@@ -388,6 +418,11 @@ export function CodeReviewStreamView({ reviewId, onComplete }: CodeReviewStreamV
               <Badge variant="secondary" className="gap-1.5">
                 <XCircle className="h-3 w-3" />
                 Cancelled
+              </Badge>
+            ) : reviewStatus === 'interrupted' ? (
+              <Badge variant="secondary" className="gap-1.5">
+                <AlertCircle className="h-3 w-3" />
+                Interrupted
               </Badge>
             ) : (
               <Badge variant="default" className="gap-1.5 bg-emerald-500 hover:bg-emerald-600">
@@ -423,6 +458,17 @@ export function CodeReviewStreamView({ reviewId, onComplete }: CodeReviewStreamV
             <div className="flex items-center gap-2 text-slate-400">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Waiting for events...</span>
+            </div>
+          ) : events.length === 0 && isComplete ? (
+            <div className="text-slate-500">
+              {isLoadingHistory ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading session log...</span>
+                </div>
+              ) : (
+                <span>No session logs available.</span>
+              )}
             </div>
           ) : (
             <div className="space-y-1">

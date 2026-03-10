@@ -298,6 +298,13 @@ export const CodeReviewAgentConfigSchema = z.object({
   selected_repository_ids: z.array(z.number()).optional(),
   // Manually added repositories (for GitLab where pagination limits results)
   manually_added_repositories: z.array(ManuallyAddedRepositorySchema).optional(),
+  // Controls when the PR gate check (GitHub Check Run / GitLab commit status)
+  // reports a failure based on review findings.
+  //   'off'      — gate only fails on system errors (timeout, crash)
+  //   'all'      — gate fails on any finding
+  //   'warning'  — gate fails on warnings and above
+  //   'critical' — gate fails only on critical issues
+  gate_threshold: z.enum(['off', 'all', 'warning', 'critical']).optional(),
 });
 
 export type CodeReviewAgentConfig = z.infer<typeof CodeReviewAgentConfigSchema>;
@@ -772,6 +779,10 @@ export type OpenCodeSettings = z.infer<typeof OpenCodeSettingsSchema>;
 export const CustomLlmProviderSchema = z.enum(['anthropic', 'openai', 'openai-compatible']);
 
 export type CustomLlmProvider = z.infer<typeof CustomLlmProviderSchema>;
+
+export const InterleavedFormatSchema = z.enum(['reasoning_content', 'think']);
+
+export type InterleavedFormat = z.infer<typeof InterleavedFormatSchema>;
 
 export const CustomLlmExtraBodySchema = z.record(z.string(), z.any());
 

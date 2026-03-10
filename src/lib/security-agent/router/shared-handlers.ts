@@ -20,7 +20,10 @@ import {
   deleteFindingsByRepository as deleteFindingsByRepositoryDb,
 } from '@/lib/security-agent/db/security-findings';
 import { getDashboardStats } from '@/lib/security-agent/db/dashboard-stats';
-import { canStartAnalysis } from '@/lib/security-agent/db/security-analysis';
+import {
+  canStartAnalysis,
+  enqueueBacklogFindings,
+} from '@/lib/security-agent/db/security-analysis';
 import {
   hasSecurityReviewPermissions,
   getReauthorizeUrl,
@@ -289,6 +292,33 @@ export function createSecurityAgentHandlers<TExtra = {}>(deps: SecurityAgentDeps
           },
           ctx.user.id
         );
+
+        // Enqueue backlog findings when include_existing becomes active — either
+        // because it was just toggled ON, or because auto-analysis was re-enabled
+        // while include_existing was already ON.
+        const wasAutoAnalysisOn = existingConfig?.config.auto_analysis_enabled ?? false;
+        const isAutoAnalysisOn =
+          input.autoAnalysisEnabled ?? existingConfig?.config.auto_analysis_enabled ?? false;
+        const wasIncludeExisting = existingConfig?.config.auto_analysis_include_existing ?? false;
+        const isNowIncludeExisting = input.autoAnalysisIncludeExisting ?? wasIncludeExisting;
+
+        const includeExistingJustTurnedOn = isNowIncludeExisting && !wasIncludeExisting;
+        const autoAnalysisReEnabled =
+          isAutoAnalysisOn && !wasAutoAnalysisOn && isNowIncludeExisting;
+
+        if (isAutoAnalysisOn && (includeExistingJustTurnedOn || autoAnalysisReEnabled)) {
+          enqueueBacklogFindings({
+            owner: securityOwner,
+            autoAnalysisMinSeverity:
+              input.autoAnalysisMinSeverity ??
+              existingConfig?.config.auto_analysis_min_severity ??
+              'high',
+          }).catch(error => {
+            // Fire-and-forget: don't fail the config save if backlog enqueue errors.
+            // The next sync cron will pick up any missed findings.
+            console.error('Failed to enqueue backlog findings', error);
+          });
+        }
 
         trackSecurityAgentConfigSaved({
           distinctId: ctx.user.id,

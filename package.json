@@ -47,6 +47,7 @@
     "@chat-adapter/state-redis": "^4.15.0",
     "@kilocode/db": "workspace:*",
     "@kilocode/encryption": "workspace:*",
+    "@kilocode/kiloclaw-secret-catalog": "workspace:*",
     "@kilocode/worker-utils": "workspace:*",
     "@lottiefiles/dotlottie-react": "^0.17.6",
     "@mdx-js/loader": "^3.1.1",
@@ -193,7 +194,8 @@
       "diff": ">=8.0.3",
       "fast-xml-parser": ">=5.3.4",
       "vite": ">=6.4.1",
-      "qs": ">=6.14.1"
+      "qs": ">=6.14.1",
+      "serialize-javascript": ">=7.0.3"
     }
   }
 }
