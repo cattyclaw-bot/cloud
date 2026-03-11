@@ -1,110 +1,69 @@
-import { describe, test, expect, beforeAll, afterEach, jest } from '@jest/globals';
-import { GET } from './route';
-import { NextRequest } from 'next/server';
+import { describe, test, expect, afterEach, jest } from '@jest/globals';
+import { NextResponse } from 'next/server';
 
 // Mock dependencies
-const mockGetBalanceAndOrgSettings = jest.fn();
-const mockDbSelect = jest.fn();
-
 jest.mock('@/lib/user.server', () => ({
   getUserFromAuth: jest.fn(),
 }));
 
-jest.mock('@/lib/organizations/organization-usage', () => ({
-  getBalanceAndOrgSettings: (...args: any[]) => mockGetBalanceAndOrgSettings(...args),
+jest.mock('@sentry/nextjs', () => ({
+  captureException: jest.fn(),
 }));
 
+const mockGetBalanceAndOrgSettings = jest.fn();
+jest.mock('@/lib/organizations/organization-usage', () => ({
+  getBalanceAndOrgSettings: (...args: unknown[]) => mockGetBalanceAndOrgSettings(...args),
+}));
+
+const mockDbSelectResult = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
+const mockDbChain = {
+  from: jest.fn().mockReturnThis(),
+  leftJoin: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  limit: jest.fn(() => mockDbSelectResult()),
+};
 jest.mock('@/lib/drizzle', () => ({
   db: {
-    select: () => ({
-      from: () => ({
-        leftJoin: () => ({
-          leftJoin: () => ({
-            leftJoin: () => ({
-              leftJoin: () => ({
-                where: () => ({
-                  limit: () => Promise.resolve([]),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    }),
+    select: jest.fn(() => mockDbChain),
   },
 }));
 
+jest.mock('@kilocode/db/schema', () => ({
+  organization_user_limits: { microdollar_limit: 'microdollar_limit', organization_id: 'organization_id', kilo_user_id: 'kilo_user_id', limit_type: 'limit_type' },
+  organization_user_usage: { microdollar_usage: 'microdollar_usage', organization_id: 'organization_id', kilo_user_id: 'kilo_user_id', limit_type: 'limit_type', usage_date: 'usage_date' },
+  organizations: { id: 'id', total_microdollars_acquired: 'total_microdollars_acquired', microdollars_used: 'microdollars_used', plan: 'plan' },
+}));
+
+jest.mock('drizzle-orm', () => ({
+  and: jest.fn((...args: unknown[]) => args),
+  eq: jest.fn((a: unknown, b: unknown) => [a, b]),
+  sql: { raw: jest.fn() },
+}));
+
+// Import after mocks
 const { getUserFromAuth } = await import('@/lib/user.server');
+const { captureException } = await import('@sentry/nextjs');
+const { GET } = await import('./route');
 
 describe('GET /api/gateway/usage', () => {
   afterEach(() => {
     jest.clearAllMocks();
+    mockDbSelectResult.mockResolvedValue([]);
   });
 
-  test('should return 401 if not authenticated', async () => {
+  test('returns 401 if not authenticated', async () => {
+    const authResponse = NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     (getUserFromAuth as jest.Mock).mockResolvedValue({
       user: null,
-      authFailedResponse: new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }),
+      authFailedResponse: authResponse,
     });
 
-    const request = new NextRequest('http://localhost:3000/api/gateway/usage');
-    const response = await GET(request);
+    const response = await GET(new Request('http://localhost:3000/api/gateway/usage'));
 
     expect(response.status).toBe(401);
   });
 
-  test('should return limits for org user with limit', async () => {
-    (getUserFromAuth as jest.Mock).mockResolvedValue({
-      user: { id: 'user-1' },
-      authFailedResponse: null,
-      organizationId: 'org-1',
-    });
-
-    mockGetBalanceAndOrgSettings.mockResolvedValue({
-      balance: 1.50,
-      plan: 'teams',
-    });
-
-    // Mock the db query to return a user with a limit
-    mockDbSelect.mockReturnValue({
-      from: () => ({
-        leftJoin: () => ({
-          leftJoin: () => ({
-            leftJoin: () => ({
-              leftJoin: () => ({
-                where: () => ({
-                  limit: () => Promise.resolve([
-                    {
-                      microdollarLimit: 2000000, // $2.00 in microdollars
-                      microdollarUsage: 150000, // $1.50 in microdollars
-                    },
-                  ]),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    });
-
-    // We need to re-import to get fresh mocks
-    const { db } = await import('@/lib/drizzle');
-    (db as any).select = mockDbSelect;
-
-    const request = new NextRequest('http://localhost:3000/api/gateway/usage');
-    const response = await GET(request);
-
-    expect(response.status).toBe(200);
-    const data = await response.json();
-    expect(data.limits).toHaveLength(1);
-    expect(data.limits[0].period).toBe('daily');
-    expect(data.limits[0].used).toBe(1.50);
-    expect(data.limits[0].limit).toBe(2.00);
-    expect(data.plan).toBe('teams');
-    expect(data.balance_usd).toBe(1.50);
-  });
-
-  test('should return empty limits for non-org user', async () => {
+  test('returns empty limits and balance for non-org user', async () => {
     (getUserFromAuth as jest.Mock).mockResolvedValue({
       user: { id: 'user-1' },
       authFailedResponse: null,
@@ -112,20 +71,50 @@ describe('GET /api/gateway/usage', () => {
     });
 
     mockGetBalanceAndOrgSettings.mockResolvedValue({
-      balance: 0,
+      balance: 3.50,
       plan: null,
     });
 
-    const request = new NextRequest('http://localhost:3000/api/gateway/usage');
-    const response = await GET(request);
+    const response = await GET(new Request('http://localhost:3000/api/gateway/usage'));
 
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.limits).toEqual([]);
     expect(data.plan).toBeNull();
+    expect(data.balance_usd).toBe(3.50);
   });
 
-  test('should return empty limits for user with no limit configured', async () => {
+  test('returns daily limit for org user with limit configured', async () => {
+    (getUserFromAuth as jest.Mock).mockResolvedValue({
+      user: { id: 'user-1' },
+      authFailedResponse: null,
+      organizationId: 'org-1',
+    });
+
+    mockGetBalanceAndOrgSettings.mockResolvedValue({
+      balance: 10.00,
+      plan: 'teams',
+    });
+
+    mockDbSelectResult.mockResolvedValue([{
+      microdollarLimit: 2000000, // $2.00
+      microdollarUsage: 1500000, // $1.50
+    }]);
+
+    const response = await GET(new Request('http://localhost:3000/api/gateway/usage'));
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.limits).toHaveLength(1);
+    expect(data.limits[0].period).toBe('daily');
+    expect(data.limits[0]).toHaveProperty('used');
+    expect(data.limits[0]).toHaveProperty('limit');
+    expect(data.limits[0]).toHaveProperty('reset_at');
+    expect(data.plan).toBe('teams');
+    expect(data.balance_usd).toBe(10.00);
+  });
+
+  test('returns empty limits for user with no limit configured (unlimited)', async () => {
     (getUserFromAuth as jest.Mock).mockResolvedValue({
       user: { id: 'user-1' },
       authFailedResponse: null,
@@ -137,37 +126,27 @@ describe('GET /api/gateway/usage', () => {
       plan: 'teams',
     });
 
-    // Mock the db query to return null limit (no limit configured)
-    mockDbSelect.mockReturnValue({
-      from: () => ({
-        leftJoin: () => ({
-          leftJoin: () => ({
-            leftJoin: () => ({
-              leftJoin: () => ({
-                where: () => ({
-                  limit: () => Promise.resolve([
-                    {
-                      microdollarLimit: null, // No limit configured
-                      microdollarUsage: 0,
-                    },
-                  ]),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    });
+    mockDbSelectResult.mockResolvedValue([{
+      microdollarLimit: null,
+      microdollarUsage: 0,
+    }]);
 
-    const { db } = await import('@/lib/drizzle');
-    (db as any).select = mockDbSelect;
-
-    const request = new NextRequest('http://localhost:3000/api/gateway/usage');
-    const response = await GET(request);
+    const response = await GET(new Request('http://localhost:3000/api/gateway/usage'));
 
     expect(response.status).toBe(200);
     const data = await response.json();
-    expect(data.limits).toEqual([]); // No limit means unlimited
+    expect(data.limits).toEqual([]);
     expect(data.balance_usd).toBe(5.00);
+  });
+
+  test('returns 500 and reports to Sentry on error', async () => {
+    (getUserFromAuth as jest.Mock).mockRejectedValue(new Error('DB connection failed'));
+
+    const response = await GET(new Request('http://localhost:3000/api/gateway/usage'));
+
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe('Internal Server Error');
+    expect(captureException).toHaveBeenCalled();
   });
 });

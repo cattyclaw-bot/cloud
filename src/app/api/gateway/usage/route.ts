@@ -24,7 +24,7 @@ import { and, eq, sql } from 'drizzle-orm';
  *   "balance_usd": 10.50
  * }
  */
-export async function GET() {
+export async function GET(_request: Request) {
   try {
     const { user, authFailedResponse, organizationId } = await getUserFromAuth({ adminOnly: false });
     if (authFailedResponse) return authFailedResponse;
